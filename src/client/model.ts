@@ -1,0 +1,266 @@
+﻿/**
+ * Pure layout algebra for the stage.
+ *
+ * A layout is a binary tree of splits whose leaves are panes. Everything here is
+ * a pure function over that tree so the model can be unit-tested without React,
+ * the slot registry or a browser.
+ */
+
+/** Hard cap: the product opens at most four live conversations. */
+const MV_MAX_PANES = 4
+/** Smallest share either side of a split may keep. */
+const MV_MIN_RATIO = 0.22
+const MV_MAX_RATIO = 0.78
+
+/**
+ * One pane slot. `sessionId` is null while the pane is empty.
+ * @typedef {{ kind: 'leaf', id: string, sessionId: string | null }} MvLeaf
+ * @typedef {{ kind: 'split', id: string, dir: 'row' | 'col', ratio: number, a: MvNode, b: MvNode }} MvSplit
+ * @typedef {MvLeaf | MvSplit} MvNode
+ */
+
+/** Clamp one split ratio into its contract range. */
+export function mvClampRatio(value: number): number {
+  if (!Number.isFinite(value)) return 0.5
+  return Math.min(MV_MAX_RATIO, Math.max(MV_MIN_RATIO, value))
+}
+
+/** One empty leaf with a stable identity. */
+export function mvLeaf(id: string): any {
+  return { kind: 'leaf', id, sessionId: null }
+}
+
+/** One split node with a stable identity. */
+export function mvSplit(id: string, dir: 'row' | 'col', ratio: number, a: any, b: any): any {
+  return { kind: 'split', id, dir, ratio: mvClampRatio(ratio), a, b }
+}
+
+/**
+ * Build one of the three presets.
+ * @param count - 2, 3 or 4 panes.
+ * @returns the preset tree with empty panes.
+ */
+export function mvPreset(count: number): any {
+  if (count <= 2) return mvSplit('s1', 'row', 0.5, mvLeaf('p1'), mvLeaf('p2'))
+  if (count === 3) {
+    return mvSplit('s1', 'row', 0.55, mvLeaf('p1'), mvSplit('s2', 'col', 0.5, mvLeaf('p2'), mvLeaf('p3')))
+  }
+  return mvSplit(
+    's1',
+    'row',
+    0.5,
+    mvSplit('s2', 'col', 0.5, mvLeaf('p1'), mvLeaf('p2')),
+    mvSplit('s3', 'col', 0.5, mvLeaf('p3'), mvLeaf('p4')),
+  )
+}
+
+/** Panes in reading order (top-to-bottom inside a column, left-to-right inside a row). */
+export function mvLeaves(node: any, out: any[]): any[] {
+  const list = out === undefined ? [] : out
+  if (node === undefined || node === null) return list
+  if (node.kind === 'leaf') {
+    list.push(node)
+    return list
+  }
+  mvLeaves(node.a, list)
+  mvLeaves(node.b, list)
+  return list
+}
+
+/** Pane count of one tree. */
+export function mvLeafCount(node: any): number {
+  return mvLeaves(node).length
+}
+
+/**
+ * Rebuild the tree with a different pane count, keeping bound Sessions in
+ * reading order. Extra panes are dropped; new panes are empty.
+ * @param node - current tree (any shape).
+ * @param count - target pane count (2..4).
+ * @returns the new preset tree, or `node` when the count is unchanged.
+ */
+export function mvShapeTo(node: any, count: number): any {
+  const target = Math.max(2, Math.min(MV_MAX_PANES, count))
+  const current = mvLeaves(node)
+  if (current.length === target) return node
+  const sessions: (string | null)[] = current.map((leaf) => leaf.sessionId)
+  const next = mvPreset(target)
+  const leaves = mvLeaves(next)
+  for (let index = 0; index < leaves.length; index += 1) leaves[index].sessionId = sessions[index] ?? null
+  return next
+}
+
+/** Apply one leaf-level edit without mutating the tree. */
+export function mvMapLeaves(node: any, edit: (leaf: any) => any): any {
+  if (node.kind === 'leaf') return edit(node)
+  const a = mvMapLeaves(node.a, edit)
+  const b = mvMapLeaves(node.b, edit)
+  if (a === node.a && b === node.b) return node
+  return { ...node, a, b }
+}
+
+/**
+ * Bind one Session to one pane. A Session may live in only one pane at a time,
+ * so any other pane holding it is cleared in the same edit.
+ * @param node - current tree.
+ * @param leafId - target pane.
+ * @param sessionId - Session to bind, or null to clear the pane.
+ * @returns the edited tree.
+ */
+export function mvWithSession(node: any, leafId: string, sessionId: string | null): any {
+  return mvMapLeaves(node, (leaf) => {
+    if (leaf.id !== leafId && sessionId !== null && leaf.sessionId === sessionId) return { ...leaf, sessionId: null }
+    if (leaf.id !== leafId) return leaf
+    if (leaf.sessionId === sessionId) return leaf
+    return { ...leaf, sessionId }
+  })
+}
+
+/**
+ * Exchange the Sessions of two panes.
+ * @param node - current tree.
+ * @param aId - first pane.
+ * @param bId - second pane.
+ * @returns the edited tree.
+ */
+export function mvSwapSessions(node: any, aId: string, bId: string): any {
+  if (aId === bId) return node
+  const leaves = mvLeaves(node)
+  const a = leaves.find((leaf) => leaf.id === aId)
+  const b = leaves.find((leaf) => leaf.id === bId)
+  if (a === undefined || b === undefined) return node
+  const aSession = a.sessionId
+  const bSession = b.sessionId
+  if (aSession === bSession) return node
+  return mvMapLeaves(node, (leaf) => {
+    if (leaf.id === aId) return { ...leaf, sessionId: bSession }
+    if (leaf.id === bId) return { ...leaf, sessionId: aSession }
+    return leaf
+  })
+}
+
+/** Set one split node's ratio, clamped. */
+export function mvResize(node: any, splitId: string, ratio: number): any {
+  if (node === null || node === undefined) return node
+  if (node.kind === 'leaf') return node
+  if (node.id === splitId) {
+    const clamped = mvClampRatio(ratio)
+    return clamped === node.ratio ? node : { ...node, ratio: clamped }
+  }
+  const a = mvResize(node.a, splitId, ratio)
+  const b = mvResize(node.b, splitId, ratio)
+  if (a === node.a && b === node.b) return node
+  return { ...node, a, b }
+}
+
+/**
+ * Remove one pane; its sibling takes the split's place.
+ * @param node - current tree.
+ * @param leafId - pane to remove.
+ * @returns the collapsed tree, or null when the last pane is removed.
+ */
+export function mvRemoveLeaf(node: any, leafId: string): any {
+  if (node === null || node === undefined) return null
+  if (node.kind === 'leaf') return node.id === leafId ? null : node
+  const a = mvRemoveLeaf(node.a, leafId)
+  const b = mvRemoveLeaf(node.b, leafId)
+  if (a === null) return b
+  if (b === null) return a
+  if (a === node.a && b === node.b) return node
+  return { ...node, a, b }
+}
+
+/** Find one pane by identity. */
+export function mvLeafById(node: any, leafId: string): any {
+  return mvLeaves(node).find((leaf) => leaf.id === leafId)
+}
+
+/**
+ * The pane `delta` steps away in reading order, wrapping around.
+ * @param node - current tree.
+ * @param leafId - current pane.
+ * @param delta - +1 next, -1 previous.
+ * @returns the neighbouring pane identity, or the current one when alone.
+ */
+export function mvNeighbour(node: any, leafId: string, delta: number): string {
+  const leaves = mvLeaves(node)
+  const index = leaves.findIndex((leaf) => leaf.id === leafId)
+  if (index < 0 || leaves.length < 2) return leafId
+  const next = (index + delta + leaves.length) % leaves.length
+  return leaves[next].id
+}
+
+/** Whether an unknown value is a leaf-shaped object. */
+export function mvIsLeaf(value: any): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    value.kind === 'leaf' &&
+    typeof value.id === 'string' &&
+    (value.sessionId === null || typeof value.sessionId === 'string')
+  )
+}
+
+/** Whether an unknown value is a split-shaped object with both children valid. */
+export function mvIsSplit(value: any): boolean {
+  if (value === null || typeof value !== 'object' || value.kind !== 'split') return false
+  if (typeof value.id !== 'string') return false
+  if (value.dir !== 'row' && value.dir !== 'col') return false
+  if (typeof value.ratio !== 'number' || !Number.isFinite(value.ratio)) return false
+  return value.a !== null && value.b !== null && typeof value.a === 'object' && typeof value.b === 'object'
+}
+
+/** Assign fresh identities to any node missing or duplicating one. */
+export function mvNormalizeIds(node: any, seen: Set<string>): any {
+  if (node === null || node === undefined) return node
+  if (node.kind === 'leaf') {
+    if (seen.has(node.id)) return { ...node, id: 'p' + String(seen.size + 1) }
+    seen.add(node.id)
+    return node
+  }
+  const a = mvNormalizeIds(node.a, seen)
+  const b = mvNormalizeIds(node.b, seen)
+  const id = seen.has(node.id) ? 's' + String(seen.size + 1) : node.id
+  seen.add(id)
+  if (a === node.a && b === node.b && id === node.id) return node
+  return { ...node, id, a, b }
+}
+
+/**
+ * Validate and repair an untrusted layout (persisted JSON or a probe input).
+ * @param raw - candidate value.
+ * @returns a usable tree, or null when nothing usable was supplied.
+ */
+export function mvSanitize(raw: any): any {
+  const walk = (value: any, depth: number): any => {
+    if (depth > 8) return null
+    if (mvIsLeaf(value)) return { kind: 'leaf', id: value.id, sessionId: value.sessionId }
+    if (!mvIsSplit(value)) return null
+    const a = walk(value.a, depth + 1)
+    const b = walk(value.b, depth + 1)
+    if (a === null || b === null) return null
+    const leaves = mvLeaves(a).length + mvLeaves(b).length
+    if (leaves > MV_MAX_PANES) return a
+    return { kind: 'split', id: value.id, dir: value.dir, ratio: mvClampRatio(value.ratio), a, b }
+  }
+  const tree = walk(raw, 0)
+  if (tree === null) return null
+  if (tree.kind === 'leaf') return tree
+  return mvNormalizeIds(tree, new Set())
+}
+
+/**
+ * Bind each leaf through a reconciliation function; a leaf whose Session is gone
+ * becomes empty while keeping its position.
+ * @param node - current tree.
+ * @param reconcile - maps a Session identity to itself or null.
+ * @returns the edited tree.
+ */
+export function mvReconcileTree(node: any, reconcile: (sessionId: string) => string | null): any {
+  return mvMapLeaves(node, (leaf) => {
+    if (leaf.sessionId === null) return leaf
+    const kept = reconcile(leaf.sessionId)
+    if (kept === leaf.sessionId) return leaf
+    return { ...leaf, sessionId: kept }
+  })
+}

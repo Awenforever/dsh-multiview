@@ -1,0 +1,84 @@
+# dsh-multiview — split view for DeepSeek Harness
+
+> Two to four **real** conversations side by side in one window. Every pane is the shipped Chat: composer, streaming, tool cards, approval cards, `ask_user_question`, attachments, slash commands, stop/queue.
+>
+> The goal is not "a working split view" — it is to read as a feature the app ships with: no title-bar takeover, no layout hijacking, no monkey-patching of private extension points.
+
+[中文](README.zh.md) | English
+
+## Install
+
+Add the bundle from **Plugins → Add** in DSH Desktop (or let a maintainer run `plugin_manager install_bundle`), then **quit and reopen** DeepSeek Harness so the client bundle loads again.
+
+A "Split" icon appears in the left panel list; click it to turn the central column into the stage, click again to return to the native conversation.
+
+- Requires DSH `>=0.2.1-rc.5 <0.3.0` (`engines.dsh`).
+- Uninstall: disable/remove on the Plugins page, restart. The only residue is the `localStorage['dsh.multiview.v1']` layout key (the stage's "Reset" clears it).
+
+## Using it
+
+| Action | How |
+|---|---|
+| Open / close | The "Split" icon in the sidebar panel list |
+| 2 / 3 / 4 panes | The `2` `3` `4` chips in the stage bar |
+| Resize | Drag the divider between panes |
+| Swap two panes | Drag a pane **title** onto another pane |
+| Maximize / restore | The ⤢ button in the pane header; the stage bar shows "Restore" |
+| Bind an empty pane | Search and pick a session right inside the pane |
+| Open in the native view | The ↗ button: hands the session back to the real conversation (the right sidebar's file preview and diff review only exist there) |
+| Remove a pane | The ✕ button; the last pane is cleared, never closes the panel |
+
+Shortcuts (module defaults; rebind in **Settings → Shortcuts**):
+
+| Command | Default (desktop) |
+|---|---|
+| Focus previous / next pane | `Mod+Alt+[` / `Mod+Alt+]` |
+| Maximize or restore the focused pane | `Mod+Alt+M` |
+| Remove the focused pane from the split | `Mod+Alt+W` |
+
+> The browser (Web) shell gets **no default bindings**: DSH's shortcut layer accepts a very narrow set of web/Linux combinations, and forcing one fails at boot with "reserved". Desktop defaults work; bind them manually on Web.
+
+## Not supported in v1 (on purpose)
+
+1. **File preview / diff inside a pane** — whenever any global panel is active, DSH unmounts the right sidebar's session surface (`no session surface is mounted`; shipped panels behave the same). Use ↗ to work in the native view.
+2. **Creating a session inside a pane** — the hero's workspace picker is application-level navigation. Create sessions natively.
+3. **Trajectory / plugin view switching per pane** — panes are pinned to Chat; no invented tabs.
+4. **Sidebar click routed into the focused pane** — that needs interception of a private navigation path; sidebar clicks keep their native behaviour (they leave the split).
+5. Auto-sleep — resources are released when a pane is removed or rebound; there is no pretend "pause rendering of unfocused panes".
+6. More than four panes.
+
+## Performance
+
+Measured with a CDP rAF sampler on `desktop-kfscv8c-1` (1530×851 window):
+
+| Scenario | p50 | p95 | max | long tasks >50ms | JS heap |
+|---|---|---|---|---|---|
+| Native conversation (baseline) | 16.7ms | 16.7ms | 16.8ms | 0 | 43MB |
+| Four panes mounted, idle | 16.7ms | 16.8ms | 16.8ms | 0 | 75MB |
+| Four panes, two streams at once | 16.7ms | 16.7ms | 16.8ms | 0 | 85MB |
+
+Transcripts are virtualized per turn by DSH itself, so a pane costs roughly one active turn plus one editor instance. Below 900px wide or 520px tall the stage degrades to a single pane plus a pane switcher; the layout tree is preserved.
+
+## Development
+
+No third-party dependencies; Node ≥ 22.18 (this repo uses 24.13).
+
+```powershell
+npm run build     # src/client/*.ts → client.js (single-file bundle); src/host/index.ts → index.js
+npm test          # layout algebra unit tests (node --test)
+npm run check     # release self-check: manifest / artifacts / copy / size
+```
+
+Isolated verification (**writes no profile**):
+
+```powershell
+dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
+```
+
+The overlay's row name is an absolute `file:///` URL to this repo's `index.js` (the Loader anchors relative row names at the profile root, not beside the patch file).
+
+The client only uses public slot surfaces: a keyed `main` panel, a private child slot, `SessionProvider`, the `conversation.content` factory (`variant:'embedded'`), `sessions.retain`, `shortcuts` and `locale`. See [docs/DESIGN.md](docs/DESIGN.md).
+
+## License
+
+MIT.

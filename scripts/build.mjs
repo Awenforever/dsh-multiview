@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 /** Concatenation order: each file may use the names declared above it. */
-const CLIENT_ORDER = ['i18n', 'compat', 'chrome', 'pane', 'stage', 'index']
+const CLIENT_ORDER = ['i18n', 'compat', 'model', 'store', 'chrome', 'pane', 'stage', 'index']
 const CLIENT_OUT = join(ROOT, 'client.js')
 const HOST_OUT = join(ROOT, 'index.js')
 

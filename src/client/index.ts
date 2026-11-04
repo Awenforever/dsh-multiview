@@ -1,14 +1,73 @@
 /**
- * Client half entry: copy, styles, and the three slot registrations.
+ * Client half entry: copy, styles, slot registrations, shortcuts and hydration.
  *
- * Registration is expressed through `slots.inject`, so this plugin waits for
- * the shipped declarations it contributes into instead of racing boot order.
- * The pane occupant is registered only after this plugin's own `main` entry has
- * declared the private slot, which also proves the conversation assembly loaded.
+ * Registration is expressed through `slots.inject`, so this plugin waits for the
+ * shipped declarations it contributes into instead of racing boot order.
  */
 
 /** Services this plugin's apply body actually touches. */
-const MV_INJECT = ['slots', 'sessions', 'workspaces', 'locale']
+const MV_INJECT = ['slots', 'sessions', 'workspaces', 'locale', 'layout', 'uiWorkspace', 'shortcuts']
+
+/**
+ * Shortcut defaults for the Desktop shells only.
+ *
+ * The registry validates every default against every runtime/platform pair,
+ * including browser/Linux, whose push-to-talk style allow-list rejects almost
+ * every combination. Omitting the web profiles leaves those unbound (the user
+ * can still assign them in Settings 鈫?Shortcuts) instead of failing the command.
+ * @param code - physical key code.
+ */
+function mvShortcutDefaults(code: string) {
+  const binding = { code, modifiers: ['primary', 'alt'] }
+  return {
+    'desktop:macos': binding,
+    'desktop:windows': binding,
+    'desktop:linux': binding,
+  }
+}
+
+/**
+ * Register one pane command. A default key that collides with another plugin or
+ * a reserved combination must not break the panel, so the command is retried
+ * without a default binding and stays assignable from Settings 鈫?Shortcuts.
+ * @param ctx - client root context.
+ * @param spec - identity, label key and handler.
+ */
+function mvRegisterShortcut(ctx: any, spec: { id: string; labelKey: string; code: string; run: () => void }): void {
+  const label = () => T(spec.labelKey)
+  const resolve = () => {
+    const info = (PTX as any).layout.panelInfo.getSnapshot()
+    if (info.activePanelId !== MV_PANEL_ID) return { status: 'pass' }
+    return {
+      status: 'handled',
+      run: () => {
+        try {
+          spec.run()
+        } catch (error) {
+          console.error('dsh-multiview: shortcut failed', spec.id, error)
+        }
+      },
+    }
+  }
+  const base = { id: spec.id, label, aliases: ['multiview', 'split'], regions: ['page', 'editable'], modals: [], resolve }
+  try {
+    ctx.effect(() => ctx.shortcuts.register({ ...base, defaults: mvShortcutDefaults(spec.code) }), 'dsh-multiview: ' + spec.id)
+  } catch (error) {
+    console.warn('dsh-multiview: default binding rejected, registering without one:', spec.id, error)
+    ctx.effect(() => ctx.shortcuts.register({ ...base, defaults: {} }), 'dsh-multiview: unbound ' + spec.id)
+  }
+}
+
+/**
+ * Focus one pane and hand the keyboard to its composer when the build exposes
+ * that surface; visual focus alone is the documented fallback.
+ * @param leafId - pane to focus.
+ */
+function mvFocusPane(leafId: string): void {
+  mvFocus(leafId)
+  const leaf = mvLeafById(mvGetState().layout, leafId)
+  if (leaf !== undefined && leaf.sessionId !== null) mvFocusComposer(leaf.sessionId)
+}
 
 /**
  * Install the multiview panel.
@@ -31,8 +90,12 @@ function apply(ctx) {
     }
   }, 'dsh-multiview: styles')
 
-  ctx.slots.inject('main', () =>
-    ctx.slots.register(
+  mvHydrate()
+
+  // The sidebar entry is registered from inside the `main` declaration so the
+  // icon can never appear before the panel key is selectable.
+  ctx.slots.inject('main', function* () {
+    yield ctx.slots.register(
       {
         name: 'main',
         key: MV_PANEL_ID,
@@ -42,28 +105,57 @@ function apply(ctx) {
         },
       },
       MultiviewStage,
-    ),
-  )
-
-  ctx.slots.inject('sidebar.panellist', () =>
-    ctx.slots.register(
-      {
-        name: 'sidebar.panellist',
-        id: MV_PANEL_ID,
-        order: 30,
-        label: () => T('panel'),
-        locale: NS,
-      },
-      MultiviewPanelIcon,
-    ),
-  )
+    )
+    yield ctx.slots.inject('sidebar.panellist', () =>
+      ctx.slots.register(
+        {
+          name: 'sidebar.panellist',
+          id: MV_PANEL_ID,
+          order: 30,
+          label: () => T('panel'),
+          locale: NS,
+        },
+        MultiviewPanelIcon,
+      ),
+    )
+  })
 
   ctx.slots.inject(MV_PANE_SLOT, () => ctx.slots.register({ name: MV_PANE_SLOT, locale: NS }, PaneConversation))
 
+  mvRegisterShortcut(ctx, {
+    id: 'multiview.pane.focusPrev',
+    labelKey: 'shortcutFocusPrev',
+    code: 'BracketLeft',
+    run: () => mvFocusPane(mvNeighbour(mvGetState().layout, mvGetState().focused, -1)),
+  })
+  mvRegisterShortcut(ctx, {
+    id: 'multiview.pane.focusNext',
+    labelKey: 'shortcutFocusNext',
+    code: 'BracketRight',
+    run: () => mvFocusPane(mvNeighbour(mvGetState().layout, mvGetState().focused, 1)),
+  })
+  mvRegisterShortcut(ctx, {
+    id: 'multiview.pane.maximize',
+    labelKey: 'shortcutMaximize',
+    code: 'KeyM',
+    run: () => {
+      const state = mvGetState()
+      mvToggleMaximize(state.focused)
+    },
+  })
+  mvRegisterShortcut(ctx, {
+    id: 'multiview.pane.remove',
+    labelKey: 'shortcutRemove',
+    code: 'KeyW',
+    run: () => {
+      mvRemovePane(mvGetState().focused)
+    },
+  })
+
   /**
    * Loopback-only inspection hook for the CDP smoke runs: it exposes the same
-   * read-only probes the tests would otherwise duplicate. Never installed on a
-   * non-loopback origin.
+   * read-only probes and pure edits the tests would otherwise duplicate. Never
+   * installed on a non-loopback origin.
    */
   const host = typeof window === 'undefined' ? '' : window.location.hostname
   if (host === '127.0.0.1' || host === 'localhost') {
@@ -71,9 +163,23 @@ function apply(ctx) {
       version: '0.1.0',
       list: () => PTX.sessions.list.getSnapshot(),
       seed: (limit) => mvSeed(limit),
-      topUp: (panes, limit) => mvTopUp(panes, limit),
       live: () => mvConversationLive(),
-      focus: (sessionId) => mvFocusComposer(sessionId),
+      focusComposer: (sessionId) => mvFocusComposer(sessionId),
+      state: () => mvGetState(),
+      shape: (count) => mvSetShape(count),
+      bind: (leafId, sessionId) => mvBind(leafId, sessionId),
+      maximize: (leafId) => mvToggleMaximize(leafId),
+      restore: () => mvRestore(),
+      resize: (splitId, ratio) => mvResizeSplit(splitId, ratio),
+      swap: (a, b) => mvSwapLeaves(a, b),
+      remove: (leafId) => mvRemovePane(leafId),
+      reset: () => mvReset(),
+      neighbour: (leafId, delta) => mvNeighbour(mvGetState().layout, leafId, delta),
+      mainKeys: () => (PTX.slots.entries('main') || []).map((entry) => entry.options.key),
+      panelInfo: () => PTX.layout.panelInfo.getSnapshot(),
+      paneEntries: () => (PTX.slots.entries(MV_PANE_SLOT) || []).length,
+      open: () => PTX.layout.selectPanel(MV_PANEL_ID),
+      close: () => PTX.layout.selectPanel(null),
     }
   }
 }

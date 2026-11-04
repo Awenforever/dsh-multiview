@@ -1,9 +1,15 @@
 /**
- * The stage: the panel's own chrome plus one entry per pane.
+ * The stage: panel chrome, the recursive split renderer, the pane frame and the
+ * session picker.
  *
- * M0 keeps the layout implicit (one row, two panes) so the mechanism can be
- * verified end to end; M1 replaces `mvLayoutOf` with the persisted tree.
+ * Layout state lives in `store.ts`; this file only renders it and turns pointer
+ * gestures into the store's pure edits.
  */
+
+/** Stage state subscription for React 18's external-store hook. */
+function useMvState(): any {
+  return React.useSyncExternalStore(mvSubscribe, mvGetState, mvGetState)
+}
 
 /** Sidebar panel-list icon; inherits `currentColor` from the rail. */
 function MultiviewPanelIcon() {
@@ -16,7 +22,7 @@ function MultiviewPanelIcon() {
 }
 
 /** Status dot state for one pane, derived from the shared Session status map. */
-function mvDotState(status) {
+function mvDotState(status: any): string {
   if (status === undefined || status === null) return 'idle'
   if (status.pendingInteraction !== undefined) return 'waiting'
   if (status.running === true) return 'running'
@@ -25,42 +31,213 @@ function mvDotState(status) {
 }
 
 /** Accessible label for a dot state. */
-function mvDotLabel(state) {
+function mvDotLabel(state: string): string {
   if (state === 'running') return T('running')
   if (state === 'waiting') return T('waiting')
   if (state === 'unread') return T('unread')
   return ''
 }
 
-/**
- * One pane frame: the compact header this plugin owns, then the session body.
- * @param props - pane index, bound Session, and the framework seats.
- * @returns the pane element.
- */
+/** Session rows the picker may offer: non-blank, non-archived, newest first. */
+function mvPickableRows(query: string): any[] {
+  const need = query.trim().toLowerCase()
+  try {
+    const list = PTX.sessions.list.getSnapshot()
+    const rows: any[] = []
+    for (const id of list.ids) {
+      const row = list.byId[id]
+      if (row === undefined || row.blank === true) continue
+      if (mvIsArchived(id)) continue
+      const title = row.title === undefined || row.title === '' ? id : row.title
+      if (need !== '' && !title.toLowerCase().includes(need) && !id.toLowerCase().includes(need)) continue
+      rows.push({ id, title })
+      if (rows.length >= 120) break
+    }
+    return rows
+  } catch (error) {
+    return []
+  }
+}
+
+/** Empty-pane session picker: filter field plus the most recent sessions. */
+function MvPanePicker(props) {
+  const { onPick } = props
+  const [query, setQuery] = React.useState('')
+  const rows = mvPickableRows(query)
+  return h(
+    'div',
+    { className: 'mv-picker', 'data-mv-picker': '' },
+    h('input', {
+      className: 'mv-picker-search',
+      type: 'search',
+      value: query,
+      placeholder: T('pickSearch'),
+      'aria-label': T('pickSearch'),
+      autoFocus: true,
+      onChange: (event) => setQuery(event.target.value),
+      onKeyDown: (event) => {
+        if (event.key === 'Enter' && rows.length > 0) onPick(rows[0].id)
+        if (event.key === 'Escape') event.currentTarget.blur()
+      },
+    }),
+    h(
+      'div',
+      { className: 'mv-picker-list' },
+      rows.length === 0
+        ? h('div', { className: 'mv-picker-empty' }, T('pickEmpty'))
+        : rows.map((row) =>
+            h(
+              'button',
+              {
+                key: row.id,
+                type: 'button',
+                className: 'mv-picker-item',
+                title: row.title,
+                onClick: () => onPick(row.id),
+              },
+              row.title,
+            ),
+          ),
+    ),
+  )
+}
+
+/** One draggable split boundary. */
+function MvDivider(props) {
+  const { node, onResize } = props
+  const [dragging, setDragging] = React.useState(false)
+  const ref = React.useRef(null)
+
+  const ratioAt = (event: any): number => {
+    const element = ref.current
+    if (element === null) return node.ratio
+    const parent = element.parentElement
+    if (parent === null) return node.ratio
+    const rect = parent.getBoundingClientRect()
+    if (node.dir === 'row') {
+      if (rect.width === 0) return node.ratio
+      return (event.clientX - rect.left) / rect.width
+    }
+    if (rect.height === 0) return node.ratio
+    return (event.clientY - rect.top) / rect.height
+  }
+
+  React.useEffect(() => {
+    if (!dragging) return undefined
+    const move = (event: PointerEvent) => onResize(node.id, ratioAt(event))
+    const stop = () => setDragging(false)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+    }
+  }, [dragging, node.id, node.dir])
+
+  return h('div', {
+    ref,
+    className: 'mv-divider',
+    'data-dir': node.dir,
+    'data-divider': node.id,
+    'data-dragging': dragging ? 'true' : 'false',
+    role: 'separator',
+    'aria-orientation': node.dir === 'row' ? 'vertical' : 'horizontal',
+    onPointerDown: (event) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      setDragging(true)
+    },
+  })
+}
+
+/** Render one split node: two sized slots around a draggable boundary. */
+function MvSplitView(props) {
+  const { node, surface } = props
+  return h(
+    'div',
+    { className: 'mv-split', 'data-dir': node.dir },
+    h('div', { className: 'mv-slot', 'data-dir': node.dir, style: { flexGrow: node.ratio } }, renderMvNode(node.a, surface)),
+    h(MvDivider, { node, onResize: surface.onResize }),
+    h('div', { className: 'mv-slot', 'data-dir': node.dir, style: { flexGrow: 1 - node.ratio } }, renderMvNode(node.b, surface)),
+  )
+}
+
+/** Render one pane frame. */
 function PaneFrame(props) {
-  const { index, sessionId, focused, SessionProvider, renderSlot, status, onFocus } = props
-  const title = mvTitle(sessionId)
+  const { leaf, surface } = props
+  const { state, dragging } = surface
+  const focused = state.focused === leaf.id
+  const sessionId = leaf.sessionId
+  const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty')
+  const status = sessionId === null ? undefined : surface.statuses.get(sessionId)
   const dot = mvDotState(status)
+  const maximized = state.maximized === leaf.id
+
   return h(
     'div',
     {
       className: 'mv-pane',
-      'data-pane-id': 'pane-' + String(index + 1),
-      'data-focused': focused === true ? 'true' : 'false',
-      onPointerDownCapture: () => onFocus(index),
-      onFocusCapture: () => onFocus(index),
+      'data-pane-id': leaf.id,
+      'data-pane': '',
+      'data-focused': focused ? 'true' : 'false',
+      'data-drop': dragging.over === leaf.id && dragging.from !== null && dragging.from !== leaf.id ? 'true' : 'false',
+      onPointerDownCapture: () => surface.onFocus(leaf.id),
+      onFocusCapture: () => surface.onFocus(leaf.id),
     },
     h(
       'div',
       { className: 'mv-head', 'data-pane-head': '' },
       h('span', { className: 'mv-dot', 'data-state': dot, title: mvDotLabel(dot), 'aria-hidden': dot === 'idle' }),
-      h('span', { className: 'mv-head-title' }, title === undefined ? T('empty') : title),
+      h(
+        'span',
+        {
+          className: 'mv-head-title',
+          title: sessionId === null ? T('empty') : title,
+          onPointerDown: (event) => surface.onHeadPointerDown(leaf.id, event),
+        },
+        title,
+      ),
+      h(
+        'div',
+        { className: 'mv-head-actions' },
+        h(MvIconButton, {
+          label: maximized ? T('restore') : T('maximize'),
+          path: maximized ? MV_ICON.restore : MV_ICON.maximize,
+          onClick: () => surface.onMaximize(leaf.id),
+        }),
+        sessionId === null
+          ? null
+          : h(MvIconButton, {
+              label: T('openMain'),
+              path: MV_ICON.external,
+              onClick: () => surface.onOpenMain(sessionId),
+            }),
+        h(MvIconButton, { label: T('remove'), path: MV_ICON.close, onClick: () => surface.onRemove(leaf.id) }),
+      ),
     ),
-    h('div', { className: 'mv-body-slot' }, h(PaneHost, { sessionId, SessionProvider, renderSlot })),
+    h(
+      'div',
+      { className: 'mv-pane-body' },
+      sessionId === null
+        ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id) })
+        : h(PaneHost, {
+            sessionId,
+            SessionProvider: surface.SessionProvider,
+            renderSlot: surface.renderSlot,
+          }),
+    ),
   )
 }
 
-/** Panel-level failure containment: the main column keeps a readable note. */
+/** Dispatch one tree node to its renderer. */
+function renderMvNode(node: any, surface: any): any {
+  if (node.kind === 'leaf') return h(PaneFrame, { key: node.id, leaf: node, surface })
+  return h(MvSplitView, { key: node.id, node, surface })
+}
+
+/** Panel-level failure containment: the central column keeps a readable note. */
 class MvStageBoundary extends React.Component {
   constructor(props) {
     super(props)
@@ -88,39 +265,152 @@ function MultiviewStage(props) {
   const { renderSlot, SessionProvider, useSessions, useSessionStatus } = props
   const list = useSessions((state) => state)
   const statuses = useSessionStatus((state) => state)
-  const [focused, setFocused] = React.useState(0)
-  const [panes, setPanes] = React.useState(() => [null, null])
+  const state = useMvState()
+  const rootRef = React.useRef(null)
+  const [narrow, setNarrow] = React.useState(false)
+  const [drag, setDrag] = React.useState({ from: null, over: null })
+  const dragRef = React.useRef({ from: null, over: null, startX: 0, startY: 0, active: false })
 
   React.useEffect(() => {
-    if (list.phase !== 'ready') return
-    setPanes((current) => mvTopUp(current, 2))
+    mvReconcile()
+    mvAutoFill()
   }, [list])
 
+  React.useEffect(() => {
+    const element = rootRef.current
+    if (element === null || typeof ResizeObserver !== 'function') return undefined
+    const observer = new ResizeObserver(() => {
+      setNarrow(element.clientWidth < 900 || element.clientHeight < 520)
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  React.useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const record = dragRef.current
+      if (!record.active) return
+      const target = document.elementFromPoint(event.clientX, event.clientY)
+      const pane = target === null ? null : target.closest('[data-pane]')
+      const over = pane === null ? null : pane.getAttribute('data-pane-id')
+      if (over === record.over) return
+      record.over = over
+      setDrag({ from: record.from, over })
+    }
+    const up = () => {
+      const record = dragRef.current
+      const from = record.from
+      const over = record.over
+      dragRef.current = { from: null, over: null, startX: 0, startY: 0, active: false }
+      document.body.style.userSelect = ''
+      setDrag({ from: null, over: null })
+      if (record.active && from !== null && over !== null && from !== over) mvSwapLeaves(from, over)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [])
+
+  const surface = {
+    state,
+    statuses,
+    SessionProvider,
+    renderSlot,
+    dragging: drag,
+    onFocus: mvFocus,
+    onResize: mvResizeSplit,
+    onMaximize: mvToggleMaximize,
+    onRemove: mvRemovePane,
+    onBind: mvBind,
+    onOpenMain: (sessionId: string) => {
+      try {
+        PTX.uiWorkspace.openSession(sessionId)
+      } catch (error) {
+        console.error('dsh-multiview: opening the native view failed', error)
+      }
+    },
+    onHeadPointerDown: (leafId: string, event: any) => {
+      if (event.button !== 0) return
+      dragRef.current = { from: leafId, over: null, startX: event.clientX, startY: event.clientY, active: false }
+      const arm = (moveEvent: PointerEvent) => {
+        const record = dragRef.current
+        if (record.from === null) return
+        if (record.active) return
+        const distance = Math.abs(moveEvent.clientX - record.startX) + Math.abs(moveEvent.clientY - record.startY)
+        if (distance < 4) return
+        record.active = true
+        document.body.style.userSelect = 'none'
+        setDrag({ from: leafId, over: null })
+      }
+      window.addEventListener('pointermove', arm)
+      window.addEventListener('pointerup', () => window.removeEventListener('pointermove', arm), { once: true })
+    },
+  }
+
+  const leaves = mvLeaves(state.layout)
+  const maximizedLeaf = state.maximized === null ? null : mvLeafById(state.layout, state.maximized)
+  const focusedLeaf = leaves.find((leaf) => leaf.id === state.focused) ?? leaves[0]
+  const visibleLeaf = maximizedLeaf === null ? focusedLeaf : maximizedLeaf
   const body = h(
     'div',
-    { className: 'mv-body', 'data-dir': 'row', 'data-mv-body': '' },
-    panes.map((sessionId, index) =>
-      h(PaneFrame, {
-        key: 'pane-' + String(index + 1),
-        index,
-        sessionId,
-        focused: index === focused,
-        SessionProvider,
-        renderSlot,
-        status: sessionId === null ? undefined : statuses.get(sessionId),
-        onFocus: setFocused,
-      }),
-    ),
+    { className: 'mv-body', 'data-mv-body': '' },
+    renderMvNode(narrow ? visibleLeaf : maximizedLeaf === null ? state.layout : maximizedLeaf, surface),
   )
+
+  const chips = narrow
+    ? leaves.map((leaf) => {
+        const title = leaf.sessionId === null ? T('empty') : mvTitle(leaf.sessionId) ?? T('empty')
+        return h(
+          'button',
+          {
+            key: 'chip-' + leaf.id,
+            type: 'button',
+            className: 'mv-chip',
+            'data-active': leaf.id === focusedLeaf.id ? 'true' : 'false',
+            title,
+            onClick: () => mvFocus(leaf.id),
+          },
+          title.length > 14 ? title.slice(0, 14) + '…' : title,
+        )
+      })
+    : []
 
   return h(
     'div',
-    { className: 'mv-root', 'data-multiview': '' },
+    { ref: rootRef, className: 'mv-root', 'data-multiview': '' },
     h(
       'header',
       { className: 'mv-bar', 'data-window-drag': true },
       h('span', { className: 'mv-bar-title' }, T('title')),
+      h(
+        'div',
+        { className: 'mv-seg', role: 'group', 'aria-label': T('shape') },
+        [2, 3, 4].map((count) =>
+          h(
+            'button',
+            {
+              key: 'shape-' + String(count),
+              type: 'button',
+              className: 'mv-chip',
+              'data-active': leaves.length === count && maximizedLeaf === null ? 'true' : 'false',
+              title: mvFormat(T('shapeN'), { n: count }),
+              'aria-label': mvFormat(T('shapeN'), { n: count }),
+              onClick: () => mvSetShape(count),
+            },
+            String(count),
+          ),
+        ),
+      ),
+      state.maximized === null
+        ? null
+        : h('button', { type: 'button', className: 'mv-chip', 'data-active': 'true', onClick: mvRestore }, T('restore')),
       h('span', { className: 'mv-bar-spacer' }),
+      h('div', { className: 'mv-strip' }, chips),
     ),
     h(MvStageBoundary, null, body),
   )

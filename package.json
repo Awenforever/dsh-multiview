@@ -26,15 +26,16 @@
     "README.md",
     "README.zh.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/*.md"
   ],
   "engines": {
     "dsh": ">=0.2.1-rc.5 <0.3.0"
   },
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "node --disable-warning=ExperimentalWarning scripts/build.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node --test test/"
+    "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts"
   },
   "dsh": {
     "bundle": {
