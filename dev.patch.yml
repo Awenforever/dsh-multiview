@@ -1,0 +1,12 @@
+# Development overlay only — never shipped, never installed into a profile.
+#
+# Loads this working tree into an isolated profile without touching that
+# profile's package.json or cordis.patch.yml:
+#
+#   dsh --profile web --patch <repo>/dev.patch.yml web --port 0 --no-open
+#
+# The row name below is resolved relative to this patch file's directory.
+- insert:
+    - id: multiview-dev
+      name: '.'
+      config: {}

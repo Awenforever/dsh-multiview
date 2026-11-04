@@ -1,0 +1,48 @@
+{
+  "name": "dsh-multiview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-view for DeepSeek Harness: 2-4 live conversations side by side, each pane a real Chat, with resize, swap and pane focus.",
+  "license": "MIT",
+  "author": "Awenforever",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Awenforever/dsh-multiview.git"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

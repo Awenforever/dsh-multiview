@@ -1,0 +1,7 @@
+# dsh-multiview bundle.
+# The whole UI lives in the Client half; the Host half only needs one activatable
+# row so the bundle can be installed, listed and disabled as a unit.
+- insert:
+    - id: multiview
+      name: 'dsh-multiview'
+      config: {}
