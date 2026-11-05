@@ -1,6 +1,6 @@
 {
   "name": "dsh-multiview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Multi-view for DeepSeek Harness: 2-4 live conversations side by side, each pane a real Chat, with resize, swap and pane focus.",
@@ -30,7 +30,7 @@
     "docs/*.md"
   ],
   "engines": {
-    "dsh": ">=0.2.1-rc.5 <0.3.0"
+    "dsh": ">=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.3.0"
   },
   "scripts": {
     "build": "node --disable-warning=ExperimentalWarning scripts/build.mjs",

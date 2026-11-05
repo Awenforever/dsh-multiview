@@ -107,34 +107,51 @@ function MvDivider(props) {
   const { node, onResize } = props
   const [dragging, setDragging] = React.useState(false)
   const ref = React.useRef(null)
+  const lastRatio = React.useRef(node.ratio)
 
-  const ratioAt = (event: any): number => {
+  /**
+   * Ratio under the pointer, measured against the split container.
+   * @param dir - split axis.
+   * @param event - pointer event.
+   * @returns the requested ratio, or the last accepted one when unmeasurable.
+   */
+  const ratioAt = (dir: string, event: any): number => {
     const element = ref.current
-    if (element === null) return node.ratio
+    if (element === null) return lastRatio.current
     const parent = element.parentElement
-    if (parent === null) return node.ratio
+    if (parent === null) return lastRatio.current
     const rect = parent.getBoundingClientRect()
-    if (node.dir === 'row') {
-      if (rect.width === 0) return node.ratio
-      return (event.clientX - rect.left) / rect.width
-    }
-    if (rect.height === 0) return node.ratio
-    return (event.clientY - rect.top) / rect.height
+    const size = dir === 'row' ? rect.width : rect.height
+    if (size === 0) return lastRatio.current
+    const offset = dir === 'row' ? event.clientX - rect.left : event.clientY - rect.top
+    return offset / size
   }
 
-  React.useEffect(() => {
-    if (!dragging) return undefined
-    const move = (event: PointerEvent) => onResize(node.id, ratioAt(event))
-    const stop = () => setDragging(false)
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
-    return () => {
+  // Listeners are attached inside pointerdown, not from an effect: an effect
+  // commits after paint, so the first pointermove frames of a fast drag would
+  // be dropped (observed on a real desktop window). Capturing the ratio here
+  // also keeps the handler independent of re-renders.
+  const beginDrag = (event: any) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    setDragging(true)
+    const dir = node.dir
+    const splitId = node.id
+    const move = (moveEvent: PointerEvent) => {
+      const ratio = ratioAt(dir, moveEvent)
+      lastRatio.current = ratio
+      onResize(splitId, ratio)
+    }
+    const stop = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', stop)
       window.removeEventListener('pointercancel', stop)
+      setDragging(false)
     }
-  }, [dragging, node.id, node.dir])
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+  }
 
   return h('div', {
     ref,
@@ -144,11 +161,7 @@ function MvDivider(props) {
     'data-dragging': dragging ? 'true' : 'false',
     role: 'separator',
     'aria-orientation': node.dir === 'row' ? 'vertical' : 'horizontal',
-    onPointerDown: (event) => {
-      if (event.button !== 0) return
-      event.preventDefault()
-      setDragging(true)
-    },
+    onPointerDown: beginDrag,
   })
 }
 

@@ -12,7 +12,7 @@ Add the bundle from **Plugins → Add** in DSH Desktop (or let a maintainer run 
 
 A "Split" icon appears in the left panel list; click it to turn the central column into the stage, click again to return to the native conversation.
 
-- Requires DSH `>=0.2.1-rc.5 <0.3.0` (`engines.dsh`).
+- Requires DSH `>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.3.0` (`engines.dsh`).
 - Uninstall: disable/remove on the Plugins page, restart. The only residue is the `localStorage['dsh.multiview.v1']` layout key (the stage's "Reset" clears it).
 
 ## Using it

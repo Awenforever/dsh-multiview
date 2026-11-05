@@ -1,7 +1,17 @@
 # dsh-multiview — 验收证据
 
 > 目标机：`desktop-kfscv8c-1`（`DESKTOP-KFSCV8C`，100.126.54.11，`king_`），DSH Desktop `0.2.1-rc.5`。
-> 验证方式：隔离 `web` profile 经 `--patch` overlay 加载本仓库工作树（**未写入任何 profile**），用无头 Edge + CDP 驱动。as-of 2026-11-05。
+> 真机：`win11-test`（`DESKTOP-GB7NLMT`，100.108.63.25，`king`），DSH Desktop **`0.2.2-rc.1`（commit c59d10a）**。
+> 验证方式：`desktop-kfscv8c-1` 用隔离 `web` profile + `--patch` overlay（**未写入任何 profile**）+ 无头 Edge/CDP；`win11-test` 用**真实桌面应用 + 测试 profile**（`C:\Users\Administrator\.dsh\profiles\desktop`，装前已备份）。as-of 2026-11-05。
+
+## 0. 跨版本结论
+
+| DSH 版本 | 安装形态 | 结论 |
+|---|---|---|
+| `0.2.1-rc.5` | 隔离 web profile（overlay） | 全部 14 项冒烟通过 |
+| `0.2.2-rc.1` | **真实 Electron 桌面应用 + 测试 profile** | 面板挂载、2/3/4 格、格内真实对话流式、格内 `ask_user_question` 卡片与作答、分割线/最大化/还原均通过 |
+
+`engines.dsh` 因此改为 `>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.3.0`（semver 的预发布规则使单条 `>=0.2.1-rc.5 <0.3.0` 会拒绝 `0.2.2-rc.1`）。
 
 ## 1. 单元与静态检查
 
@@ -30,6 +40,22 @@
 | S12 | 草稿存活 | 输入 `draft-probe-123` → 切面板 → 切回，文本仍在 |
 | S13 | 快捷键注册 | 桌面默认键注册成功；无 `dsh-multiview` 警告（Web 端按设计不绑默认） |
 | S14 | 控制台 | 启动无本插件 warning/error（仅有 4 条与插件无关的 404 资源噪声） |
+
+## 2.1 win11-test 真机（DSH 0.2.2-rc.1，真实 Electron 应用）
+
+安装路径：`C:\Users\Administrator\.dsh\profiles\desktop\node_modules\dsh-multiview`，profile 的 `dependencies` 与 `dsh.profile.bundles` 各加一条；装前备份 `package.json` / `cordis.patch.yml` 为 `*.bak-20261105-0951-multiview`。
+
+| # | 场景 | 结果 |
+|---|---|---|
+| W1 | 组合与加载 | 启动图 77 条，含 `dsh-multiview`（`immediately:true`）；侧栏出现「分屏」 |
+| W2 | 面板挂载 | 2 格 + 1 分割线；标题栏（应用/编辑菜单）与侧栏未被覆盖 |
+| W3 | 2/3/4 切换 | 3 格 = row+col 两条分割线；4 格 = 3 条 |
+| W4 | 格内真实对话 | 格内发送 → 流式 → 完成（"OK"，8 秒，9.8K tok） |
+| W5 | 格内 `ask_user_question` | 卡片在格内出现；真实指针点选 A → 「提交」启用 → 提交 → 「你选择了 A」，回合完成 |
+| W6 | 最大化 / 还原 | 可见格 1 ↔ 4，顶栏「还原」出现并生效 |
+| W7 | 分割线拖拽 | **发现缺陷并修复**：快速拖动只产生 ~0.7px 位移（监听挂载晚于 pointerdown）。改为 pointerdown 内同步挂监听后，拖拽按比例生效；修复后待在本机复验一次 |
+
+> 该 VM 的测试 profile 里没有可用的审批触发条件（无 `danger-full-access` 提权会话），所以审批链路只在 `desktop-kfscv8c-1` 的 0.2.1-rc.5 实例上验证过（S11）。
 
 ## 3. 性能（CDP rAF 采样，1530×851）
 
