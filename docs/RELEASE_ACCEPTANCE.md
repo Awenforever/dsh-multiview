@@ -54,6 +54,7 @@
 | W5 | 格内 `ask_user_question` | 卡片在格内出现；真实指针点选 A → 「提交」启用 → 提交 → 「你选择了 A」，回合完成 |
 | W6 | 最大化 / 还原 | 可见格 1 ↔ 4，顶栏「还原」出现并生效 |
 | W7 | 分割线拖拽 | **发现缺陷并修复**：拖拽监听原挂在 `useEffect`，React 提交晚于 `pointerdown`，快速拖动的前几帧丢失（120px 只产生 0.7px 位移）。改为 `pointerdown` 内同步挂 window 监听 + ref 记录最后比例。修复后：VM 上用逐帧 PointerEvent 复验（ratio 0.36→0.22 并夹取），`desktop-kfscv8c-1` 上用 CDP 快速拖拽复验（0.5→0.3806） |
+| W8 | 格内审批（2026-11-06 复验） | 新建独立会话 → Agent 请求 `danger-full-access` 写 `C:\Windows\System32\mv-probe2.txt` → 审批卡在**格内**显示（「等待审批」+ 拒绝/允许一次）→ 格内拒绝 → Agent 停止申请；`mv-probe2.txt` 与 `C:\Windows\Temp\mv-approval-probe.txt` 均**不存在**。截图 `.dev/evidence-win11-approval-in-pane.png` |
 
 > VM 上 `Input.dispatchMouseEvent` 的快速拖拽没有改变比例（该窗口在后台/未聚焦时 Chromium 的合成鼠标输入不稳定），因此改用逐帧 `PointerEvent` 直接验证事件处理链路；产品路径（真实指针）与本地 CDP 验证一致。
 
@@ -66,6 +67,9 @@
 | 原生会话（基线） | 16.7ms | 16.7ms | 16.8ms | 0 | 43MB |
 | 4 格挂载、空闲 | 16.7ms | 16.8ms | 16.8ms | 0 | 75MB |
 | 4 格挂载、2 路同时流式 | 16.7ms | 16.7ms | 16.8ms | 0 | 85MB |
+| 4 格挂载、4 路**同时长流式**（60s 采样，前 ~40s 四路都在产出） | 16.7ms | **50ms** | **150ms** | **2** | 53MB |
+
+> 四路长文同时流式是本插件目前压到的最重场景：平均仍近 60fps，但 p95 升到 50ms、出现 2 个 >50ms 长任务与一次 150ms 长帧。原因是四份虚拟化 transcript 各自按 chunk 重排，属于渲染侧固有成本；未做节流/降级（保持"每格都是真实 Chat"的产品约束）。需要更稳时可后续加"非聚焦格降频"。|
 
 采样脚本：`.dev/sampler.js`（`requestAnimationFrame` 间隔分布 + `PerformanceObserver('longtask')` + `performance.memory`）。
 说明：两路流式的应答约 1–2 秒完成，采样窗口 9 秒覆盖了完整流式期；4 格同时长流式未构造（需要 4 个会长时间运行的 agent 回合）。
@@ -74,10 +78,10 @@
 
 | # | 项 | 状态 |
 |---|---|---|
-| P1 | `win11-test` 真实桌面安装 + 五项冒烟 | **未执行**（需要 SSH 到 Windows VM 并按 `dsh-codex-advisor/RUNBOOK-win11-test.md` §3.3 起交互计划任务） |
-| P2 | desktop profile（live）安装 | **未执行**，等用户逐窗口批准 |
-| P3 | 4 格同时长流式（>30s）压力 | 未构造，见 §3 说明 |
-| P4 | 卸载复验（插件页移除 → 重启 → 无残留） | 隔离实例中已验证 stop/start 与面板卸载；正式卸载需在装有 bundle 的 profile 上做，随 P1/P2 |
+| P1 | `win11-test` 真实桌面安装 + 五项冒烟 | **已完成**（2026-11-05/06，W1–W8） |
+| P2 | desktop profile（live）安装 | **已完成**（2026-11-06，`plugin_manager install_bundle`，`include:multiview` active，未重启 DSH；客户端图标需刷新窗口一次才出现） |
+| P3 | 4 格同时长流式（>30s）压力 | **已完成**（§3 最后一行：p95 50ms、2 长任务） |
+| P4 | 卸载复验（插件页移除 → 重启 → 无残留） | 未做（需重启，用户要求全程不重启） |
 
 ## 5. 复现步骤
 

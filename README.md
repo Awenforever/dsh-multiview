@@ -56,6 +56,9 @@ Measured with a CDP rAF sampler on `desktop-kfscv8c-1` (1530×851 window):
 | Native conversation (baseline) | 16.7ms | 16.7ms | 16.8ms | 0 | 43MB |
 | Four panes mounted, idle | 16.7ms | 16.8ms | 16.8ms | 0 | 75MB |
 | Four panes, two streams at once | 16.7ms | 16.7ms | 16.8ms | 0 | 85MB |
+| Four panes, four long streams at once | 16.7ms | 50ms | 150ms | 2 | 53MB |
+
+Four long streams is the heaviest case measured: still near 60fps on average, but p95 rises to 50ms with an occasional 150ms frame (four virtualized transcripts re-laying out per chunk). v1 deliberately does not throttle — "every pane stays a real Chat" wins over a frame number.
 
 Transcripts are virtualized per turn by DSH itself, so a pane costs roughly one active turn plus one editor instance. Below 900px wide or 520px tall the stage degrades to a single pane plus a pane switcher; the layout tree is preserved.
 
