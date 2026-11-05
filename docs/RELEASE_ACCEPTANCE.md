@@ -53,7 +53,9 @@
 | W4 | 格内真实对话 | 格内发送 → 流式 → 完成（"OK"，8 秒，9.8K tok） |
 | W5 | 格内 `ask_user_question` | 卡片在格内出现；真实指针点选 A → 「提交」启用 → 提交 → 「你选择了 A」，回合完成 |
 | W6 | 最大化 / 还原 | 可见格 1 ↔ 4，顶栏「还原」出现并生效 |
-| W7 | 分割线拖拽 | **发现缺陷并修复**：快速拖动只产生 ~0.7px 位移（监听挂载晚于 pointerdown）。改为 pointerdown 内同步挂监听后，拖拽按比例生效；修复后待在本机复验一次 |
+| W7 | 分割线拖拽 | **发现缺陷并修复**：拖拽监听原挂在 `useEffect`，React 提交晚于 `pointerdown`，快速拖动的前几帧丢失（120px 只产生 0.7px 位移）。改为 `pointerdown` 内同步挂 window 监听 + ref 记录最后比例。修复后：VM 上用逐帧 PointerEvent 复验（ratio 0.36→0.22 并夹取），`desktop-kfscv8c-1` 上用 CDP 快速拖拽复验（0.5→0.3806） |
+
+> VM 上 `Input.dispatchMouseEvent` 的快速拖拽没有改变比例（该窗口在后台/未聚焦时 Chromium 的合成鼠标输入不稳定），因此改用逐帧 `PointerEvent` 直接验证事件处理链路；产品路径（真实指针）与本地 CDP 验证一致。
 
 > 该 VM 的测试 profile 里没有可用的审批触发条件（无 `danger-full-access` 提权会话），所以审批链路只在 `desktop-kfscv8c-1` 的 0.2.1-rc.5 实例上验证过（S11）。
 
