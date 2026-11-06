@@ -1,5 +1,5 @@
 /**
- * dsh-multiview — Client half.
+ * dsh-multiview 鈥?Client half.
  * Generated from src/client/*.ts by scripts/build.mjs. Do not edit by hand.
  */
 window.__ModuleLoader__.load({
@@ -11,6 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
+const MV_PLUGIN_VERSION = '0.1.2';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -25,13 +26,32 @@ const MV_ZH = {
     stageCrashed: '分屏面板出错了：{message}',
     maximize: '最大化',
     restore: '还原',
-    remove: '从分屏移除',
+    remove: '清空这一格',
     openMain: '在原生视图打开',
     shape: '格数',
     shapeN: '{n} 格',
     running: '运行中',
     waiting: '等待你处理',
     unread: '有新结果',
+    views: '视图',
+    viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
+    viewsCurrent: '当前分屏',
+    viewsDelete: '删除视图',
+    viewsHint: '点击恢复这个分屏',
+    updateCheck: '检查更新',
+    updateChecking: '正在检查更新…',
+    updateLatest: '已是最新版本（{version}）',
+    updateAvailable: '发现新版本 {version}',
+    updateInstall: '立即更新',
+    updateInstalling: '正在更新…',
+    updateDone: '更新完成，重启 DSH 后生效',
+    updateRestart: '重启 DSH',
+    updateFailed: '检查更新失败：{message}',
+    updateUnsupported: '未检测到插件市场，无法自动更新',
+    updateLocal: '当前为本地链接安装，自动更新不可用',
+    updateIdle: '尚未检查更新',
+    cancel: '取消',
+    close: '关闭',
     shortcutFocusPrev: '聚焦上一格',
     shortcutFocusNext: '聚焦下一格',
     shortcutMaximize: '最大化或还原当前格',
@@ -51,13 +71,32 @@ const MV_EN = {
     stageCrashed: 'The split view failed: {message}',
     maximize: 'Maximize',
     restore: 'Restore',
-    remove: 'Remove from split',
+    remove: 'Clear this pane',
     openMain: 'Open in native view',
     shape: 'Pane count',
     shapeN: '{n} panes',
     running: 'Running',
     waiting: 'Waiting for you',
     unread: 'New result',
+    views: 'Views',
+    viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
+    viewsCurrent: 'Current split',
+    viewsDelete: 'Delete view',
+    viewsHint: 'Restore this split',
+    updateCheck: 'Check for updates',
+    updateChecking: 'Checking for updates…',
+    updateLatest: 'Up to date ({version})',
+    updateAvailable: 'Version {version} is available',
+    updateInstall: 'Update now',
+    updateInstalling: 'Updating…',
+    updateDone: 'Updated — restart DSH to apply',
+    updateRestart: 'Restart DSH',
+    updateFailed: 'Update check failed: {message}',
+    updateUnsupported: 'No plugin market detected; automatic updates unavailable',
+    updateLocal: 'Installed from a local link; automatic updates unavailable',
+    updateIdle: 'Not checked yet',
+    cancel: 'Cancel',
+    close: 'Close',
     shortcutFocusPrev: 'Focus previous pane',
     shortcutFocusNext: 'Focus next pane',
     shortcutMaximize: 'Maximize or restore the current pane',
@@ -402,7 +441,8 @@ function mvInitialState() {
         maximized: null,
         preset: 2,
         seeded: false,
-        reconciled: false
+        reconciled: false,
+        views: []
     };
 }
 let mvState = mvInitialState();
@@ -423,19 +463,62 @@ function mvScheduleSave() {
         mvSaveTimer = 0;
         try {
             const durable = {
-                version: 1,
+                version: 2,
                 layout: mvState.layout,
                 focused: mvState.focused,
                 preset: mvState.preset,
-                seeded: mvState.seeded
+                seeded: mvState.seeded,
+                views: mvState.views
             };
             window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable));
         } catch (error) {}
     }, 200);
 }
+function mvViewKey(layout) {
+    return mvLeaves(layout).map((leaf)=>leaf.sessionId).filter((sessionId)=>sessionId !== null).join(',');
+}
+function mvViewName(layout) {
+    let list = null;
+    try {
+        list = PTX.sessions.list.getSnapshot();
+    } catch (error) {
+        list = null;
+    }
+    const titles = mvLeaves(layout).map((leaf)=>leaf.sessionId === null ? null : list?.byId[leaf.sessionId]?.title).filter((title)=>typeof title === 'string' && title.length > 0);
+    if (titles.length === 0) return T('viewsCurrent');
+    return titles.join('  |  ');
+}
+function mvCaptureView(layout, views) {
+    const key = mvViewKey(layout);
+    if (key === '' || key.indexOf(',') < 0) return null;
+    const existing = views.find((view)=>view.id === key);
+    if (existing !== undefined) {
+        if (existing.layout === layout) return null;
+        return views.map((view)=>view.id === key ? {
+                ...view,
+                layout
+            } : view);
+    }
+    const next = [
+        {
+            id: key,
+            name: mvViewName(layout),
+            layout,
+            savedAt: Date.now()
+        },
+        ...views
+    ];
+    return next.slice(0, 12);
+}
 function mvCommit(produce) {
-    const next = produce(mvState);
-    if (next === mvState || next === null || next === undefined) return;
+    const produced = produce(mvState);
+    if (produced === mvState || produced === null || produced === undefined) return;
+    let next = produced;
+    const captured = mvCaptureView(next.layout, next.views ?? []);
+    if (captured !== null) next = {
+        ...next,
+        views: captured
+    };
     mvState = next;
     mvScheduleSave();
     for (const listener of mvListeners){
@@ -446,6 +529,19 @@ function mvCommit(produce) {
         }
     }
 }
+function mvSanitizeView(raw) {
+    if (raw === null || typeof raw !== 'object') return null;
+    const layout = mvSanitize(raw.layout);
+    if (layout === null) return null;
+    const key = mvViewKey(layout);
+    if (key === '' || key.indexOf(',') < 0) return null;
+    return {
+        id: key,
+        name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'),
+        layout,
+        savedAt: typeof raw.savedAt === 'number' ? raw.savedAt : Date.now()
+    };
+}
 function mvHydrate() {
     let raw = null;
     try {
@@ -453,33 +549,38 @@ function mvHydrate() {
     } catch (error) {
         raw = null;
     }
-    if (raw === null || typeof raw !== 'object' || raw.version !== 1) return;
+    if (raw === null || typeof raw !== 'object') return;
+    if (raw.version !== 1 && raw.version !== 2) return;
     const layout = mvSanitize(raw.layout);
     if (layout === null) return;
     const leaves = mvLeaves(layout);
     const focused = leaves.some((leaf)=>leaf.id === raw.focused) ? raw.focused : leaves[0].id;
+    const views = Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view)=>view !== null) : [];
     mvState = {
         layout,
         focused,
         maximized: null,
         preset: typeof raw.preset === 'number' ? raw.preset : leaves.length,
         seeded: raw.seeded === true,
-        reconciled: false
+        reconciled: false,
+        views
     };
 }
 function mvReset() {
-    mvCommit(()=>mvInitialState());
+    const views = mvState.views;
+    mvCommit(()=>({
+            ...mvInitialState(),
+            views
+        }));
     try {
         window.localStorage.removeItem(MV_STORAGE_KEY);
     } catch (error) {}
 }
 function mvReconcile() {
     if (mvState.reconciled) return;
-    let ready = false;
     try {
         const list = PTX.sessions.list.getSnapshot();
-        ready = list.phase === 'ready';
-        if (!ready) return;
+        if (list.phase !== 'ready') return;
         const kept = mvReconcileTree(mvState.layout, (sessionId)=>{
             const row = list.byId[sessionId];
             if (row === undefined || row.blank === true) return null;
@@ -500,42 +601,6 @@ function mvReconcile() {
                 reconciled: true
             }));
     }
-}
-function mvAutoFill() {
-    if (mvState.seeded) return;
-    try {
-        const list = PTX.sessions.list.getSnapshot();
-        if (list.phase !== 'ready') return;
-        const used = new Set(mvLeaves(mvState.layout).map((leaf)=>leaf.sessionId).filter((id)=>id !== null));
-        const ordered = (()=>{
-            const current = list.ids.find((id)=>(list.byId[id]?.retainedBy?.mainView ?? 0) > 0);
-            return current === undefined ? list.ids.slice() : [
-                current,
-                ...list.ids
-            ];
-        })();
-        const next = mvMapLeaves(mvState.layout, (leaf)=>{
-            if (leaf.sessionId !== null) return leaf;
-            const candidate = ordered.find((id)=>{
-                if (used.has(id)) return false;
-                const row = list.byId[id];
-                return row !== undefined && row.blank !== true && !mvIsArchived(id);
-            });
-            if (candidate === undefined) return leaf;
-            used.add(candidate);
-            return {
-                ...leaf,
-                sessionId: candidate
-            };
-        });
-        const filled = mvLeaves(next).some((leaf)=>leaf.sessionId !== null);
-        if (!filled) return;
-        mvCommit((current)=>({
-                ...current,
-                layout: next,
-                seeded: true
-            }));
-    } catch (error) {}
 }
 function mvSetShape(count) {
     mvCommit((current)=>{
@@ -609,25 +674,316 @@ function mvSwapLeaves(aId, bId) {
 }
 function mvRemovePane(leafId) {
     mvCommit((current)=>{
-        const leaves = mvLeaves(current.layout);
-        if (leaves.length <= 1) {
+        const leaf = mvLeafById(current.layout, leafId);
+        if (leaf === null) return current;
+        if (leaf.sessionId !== null) {
             const cleared = mvWithSession(current.layout, leafId, null);
             return cleared === current.layout ? current : {
                 ...current,
-                layout: cleared
+                layout: cleared,
+                focused: leafId
             };
         }
+        const leaves = mvLeaves(current.layout);
+        if (leaves.length <= 1) return current;
         const layout = mvRemoveLeaf(current.layout, leafId);
         if (layout === null) return current;
         const nextLeaves = mvLeaves(layout);
-        const focused = nextLeaves.some((leaf)=>leaf.id === current.focused) ? current.focused : nextLeaves[0].id;
+        const focused = nextLeaves.some((item)=>item.id === current.focused) ? current.focused : nextLeaves[0].id;
         return {
             ...current,
             layout,
             focused,
+            preset: nextLeaves.length,
             maximized: current.maximized === leafId ? null : current.maximized
         };
     });
+}
+function mvApplyView(viewId) {
+    mvCommit((current)=>{
+        const view = current.views.find((item)=>item.id === viewId);
+        if (view === undefined) return current;
+        const leaves = mvLeaves(view.layout);
+        return {
+            ...current,
+            layout: view.layout,
+            focused: leaves[0].id,
+            preset: leaves.length,
+            maximized: null
+        };
+    });
+}
+function mvDeleteView(viewId) {
+    mvCommit((current)=>current.views.some((item)=>item.id === viewId) ? {
+            ...current,
+            views: current.views.filter((item)=>item.id !== viewId)
+        } : current);
+}
+
+const MV_UPDATE_KEY = 'dsh.multiview.update.v1';
+const MV_CHECK_INTERVAL = 24 * 60 * 60 * 1000;
+const MV_BACKOFF_BASE = 60 * 60 * 1000;
+const MV_BACKOFF_MAX = 12 * 60 * 60 * 1000;
+const MV_POLL_INTERVAL = 1500;
+const MV_POLL_LIMIT = 200;
+const MV_REQUEST_TIMEOUT = 20000;
+let mvUpdateState = {
+    status: 'idle',
+    installed: MV_PLUGIN_VERSION,
+    latest: null,
+    source: null,
+    available: false,
+    localOnly: false,
+    checkedAt: 0,
+    nextAt: 0,
+    failures: 0,
+    error: null,
+    operationId: null,
+    operationState: null,
+    restartRequired: false,
+    restartSupported: false
+};
+const mvUpdateListeners = new Set();
+function mvUpdateGetState() {
+    return mvUpdateState;
+}
+function mvUpdateSubscribe(listener) {
+    mvUpdateListeners.add(listener);
+    return ()=>{
+        mvUpdateListeners.delete(listener);
+    };
+}
+function mvUpdateCommit(patch) {
+    mvUpdateState = {
+        ...mvUpdateState,
+        ...patch
+    };
+    try {
+        window.localStorage.setItem(MV_UPDATE_KEY, JSON.stringify({
+            checkedAt: mvUpdateState.checkedAt,
+            nextAt: mvUpdateState.nextAt,
+            failures: mvUpdateState.failures,
+            latest: mvUpdateState.latest,
+            available: mvUpdateState.available,
+            localOnly: mvUpdateState.localOnly,
+            source: mvUpdateState.source
+        }));
+    } catch (error) {}
+    for (const listener of mvUpdateListeners){
+        try {
+            listener();
+        } catch (error) {
+            console.error('dsh-multiview: update listener failed', error);
+        }
+    }
+}
+function mvUpdateHydrate() {
+    try {
+        const raw = JSON.parse(window.localStorage.getItem(MV_UPDATE_KEY) ?? 'null');
+        if (raw === null || typeof raw !== 'object') return;
+        mvUpdateState = {
+            ...mvUpdateState,
+            checkedAt: typeof raw.checkedAt === 'number' ? raw.checkedAt : 0,
+            nextAt: typeof raw.nextAt === 'number' ? raw.nextAt : 0,
+            failures: typeof raw.failures === 'number' ? raw.failures : 0,
+            latest: typeof raw.latest === 'string' ? raw.latest : null,
+            available: raw.available === true,
+            localOnly: raw.localOnly === true,
+            source: typeof raw.source === 'string' ? raw.source : null
+        };
+    } catch (error) {}
+}
+function mvVersionParts(version) {
+    const core = String(version).split('-')[0].split('+')[0];
+    return core.split('.').map((part)=>{
+        const value = Number.parseInt(part, 10);
+        return Number.isFinite(value) ? value : 0;
+    });
+}
+function mvVersionGt(left, right) {
+    const a = mvVersionParts(left);
+    const b = mvVersionParts(right);
+    for(let index = 0; index < Math.max(a.length, b.length); index += 1){
+        const first = a[index] ?? 0;
+        const second = b[index] ?? 0;
+        if (first !== second) return first > second;
+    }
+    return false;
+}
+async function mvUpdateGet(url) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller === null ? 0 : setTimeout(()=>controller.abort(), MV_REQUEST_TIMEOUT);
+    try {
+        const response = await fetch(url, {
+            credentials: 'same-origin',
+            headers: {
+                accept: 'application/json'
+            },
+            signal: controller === null ? undefined : controller.signal
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return await response.json();
+    } finally{
+        if (timer !== 0) clearTimeout(timer);
+    }
+}
+async function mvUpdatePost(url, body) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller === null ? 0 : setTimeout(()=>controller.abort(), MV_REQUEST_TIMEOUT);
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'content-type': 'application/json',
+                accept: 'application/json'
+            },
+            body: JSON.stringify(body),
+            signal: controller === null ? undefined : controller.signal
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return await response.json();
+    } finally{
+        if (timer !== 0) clearTimeout(timer);
+    }
+}
+async function mvUpdateCheck(force) {
+    const now = Date.now();
+    if (force !== true) {
+        if (now - mvUpdateState.checkedAt < MV_CHECK_INTERVAL) return;
+        if (mvUpdateState.nextAt > now) return;
+    }
+    if (mvUpdateState.status === 'checking' || mvUpdateState.status === 'installing') return;
+    mvUpdateCommit({
+        status: 'checking',
+        error: null
+    });
+    try {
+        let capabilities = null;
+        try {
+            capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities');
+        } catch (error) {
+            capabilities = null;
+        }
+        if (capabilities === null || capabilities.schema !== 'dsh-market/update-api/v1') {
+            mvUpdateCommit({
+                status: 'unsupported',
+                checkedAt: now,
+                nextAt: now + MV_CHECK_INTERVAL,
+                failures: 0
+            });
+            return;
+        }
+        const endpoints = capabilities.endpoints ?? {};
+        const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates';
+        const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview');
+        const pkg = answer?.package ?? null;
+        const installed = typeof pkg?.installedVersion === 'string' ? pkg.installedVersion : MV_PLUGIN_VERSION;
+        const latest = typeof pkg?.latestVersion === 'string' ? pkg.latestVersion : null;
+        const source = typeof pkg?.source === 'string' ? pkg.source : null;
+        const available = pkg?.updateAvailable === true || latest !== null && mvVersionGt(latest, installed);
+        mvUpdateCommit({
+            status: available ? 'available' : 'idle',
+            installed,
+            latest,
+            source,
+            available,
+            localOnly: source !== null && /link|local|file/i.test(source),
+            checkedAt: now,
+            nextAt: now + MV_CHECK_INTERVAL,
+            failures: 0,
+            error: null,
+            restartSupported: capabilities?.restart?.supported === true
+        });
+    } catch (error) {
+        const failures = mvUpdateState.failures + 1;
+        const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
+        mvUpdateCommit({
+            status: 'error',
+            failures,
+            checkedAt: now,
+            nextAt: now + delay,
+            error: error instanceof Error ? error.message : String(error)
+        });
+    }
+}
+async function mvUpdateInstall() {
+    if (mvUpdateState.status === 'installing') return;
+    mvUpdateCommit({
+        status: 'installing',
+        error: null,
+        operationState: 'queued'
+    });
+    try {
+        let capabilities = null;
+        try {
+            capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities');
+        } catch (error) {
+            capabilities = null;
+        }
+        if (capabilities === null) {
+            mvUpdateCommit({
+                status: 'unsupported',
+                error: null
+            });
+            return;
+        }
+        const endpoints = capabilities.endpoints ?? {};
+        const updatesPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates';
+        const operationsPath = typeof endpoints.operations === 'string' ? endpoints.operations : '/dsh-market/api/v1/operations';
+        const accepted = await mvUpdatePost(updatesPath, {
+            packageName: 'dsh-multiview'
+        });
+        const operationId = typeof accepted?.operationId === 'string' ? accepted.operationId : null;
+        if (operationId === null) throw new Error('market returned no operation');
+        mvUpdateCommit({
+            operationId,
+            operationState: 'running'
+        });
+        for(let attempt = 0; attempt < MV_POLL_LIMIT; attempt += 1){
+            await new Promise((resolve)=>setTimeout(resolve, MV_POLL_INTERVAL));
+            const record = await mvUpdateGet(operationsPath + '?operationId=' + encodeURIComponent(operationId));
+            const operation = record?.operation ?? record;
+            const state = typeof operation?.state === 'string' ? operation.state : null;
+            mvUpdateCommit({
+                operationState: state
+            });
+            if (state === 'succeeded') {
+                mvUpdateCommit({
+                    status: 'done',
+                    available: false,
+                    installed: typeof operation?.installedVersion === 'string' ? operation.installedVersion : mvUpdateState.installed,
+                    restartRequired: operation?.restartRequired === true,
+                    checkedAt: Date.now(),
+                    nextAt: Date.now() + MV_CHECK_INTERVAL
+                });
+                return;
+            }
+            if (state === 'failed' || state === 'cancelled' || state === 'rolled-back') {
+                const message = operation?.message ?? operation?.failureCode ?? state;
+                mvUpdateCommit({
+                    status: 'error',
+                    error: typeof message === 'string' ? message : String(message)
+                });
+                return;
+            }
+        }
+        mvUpdateCommit({
+            status: 'error',
+            error: 'operation timed out'
+        });
+    } catch (error) {
+        mvUpdateCommit({
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error)
+        });
+    }
+}
+function mvUpdateMaybeAutoCheck() {
+    if (mvUpdateState.status === 'checking' || mvUpdateState.status === 'installing') return;
+    if (Date.now() - mvUpdateState.checkedAt < MV_CHECK_INTERVAL) return;
+    if (mvUpdateState.nextAt > Date.now()) return;
+    void mvUpdateCheck(false);
 }
 
 const MV_CSS = `
@@ -683,6 +1039,28 @@ const MV_CSS = `
 .mv-picker-item{display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-size:13px;line-height:18px}
 .mv-picker-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-picker-empty{padding:12px 8px;font-size:13px;color:var(--dsw-alias-label-tertiary)}
+.mv-views{position:relative;display:inline-flex}
+.mv-views-count{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
+.mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base)}
+.mv-views-empty{padding:10px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
+.mv-views-row{display:flex;align-items:center;gap:4px;border-radius:6px}
+.mv-views-row[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-views-name{flex:1;min-width:0;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.mv-views-name:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-views-del{flex:none;width:22px;height:22px;margin-right:4px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11px;cursor:pointer}
+.mv-views-del:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.mv-update{position:relative}
+.mv-update[data-has-update="true"]::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:999px;background:var(--dsw-alias-state-error-primary)}
+.mv-update[data-busy="true"] svg{animation:mv-spin 1s linear infinite}
+@keyframes mv-spin{to{transform:rotate(360deg)}}
+.mv-dialog-backdrop{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent)}
+.mv-dialog{width:min(420px, calc(100vw - 48px));padding:16px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:12px;background:var(--dsw-alias-bg-base)}
+.mv-dialog-title{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.mv-dialog-text{margin-top:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);word-break:break-word}
+.mv-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.mv-dialog-button{height:28px;padding:0 12px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}
+.mv-dialog-button:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-dialog-button--primary{border-color:transparent;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-bg-base)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
 `;
 function MvGlyph(props) {
@@ -724,7 +1102,8 @@ const MV_ICON = {
     maximize: 'M3 6V3h3M13 10v3h-3M3 10v3h3M13 6V3h-3',
     restore: 'M6 6H3v3M10 10h3V7M10 6V3h3M6 10H3V7',
     close: 'M4 4l8 8M12 4l-8 8',
-    external: 'M6 10L13 3M9 3h4v4'
+    external: 'M6 10L13 3M9 3h4v4',
+    refresh: 'M13 8a5 5 0 1 1-1.7-3.8M13 2.6v3h-3'
 };
 
 function mvPhase(session, conversation, summaryBlank) {
@@ -1118,6 +1497,130 @@ class MvStageBoundary extends React.Component {
         return this.props.children;
     }
 }
+function useMvUpdate() {
+    return React.useSyncExternalStore(mvUpdateSubscribe, mvUpdateGetState, mvUpdateGetState);
+}
+function mvUpdateCaption(update) {
+    if (update.status === 'checking') return T('updateChecking');
+    if (update.status === 'installing') return T('updateInstalling');
+    if (update.status === 'done') return T('updateDone');
+    if (update.status === 'unsupported') return T('updateUnsupported');
+    if (update.status === 'error') return mvFormat(T('updateFailed'), {
+        message: update.error ?? ''
+    });
+    if (update.available === true) return mvFormat(T('updateAvailable'), {
+        version: update.latest ?? ''
+    });
+    if (update.localOnly === true) return T('updateLocal');
+    if (update.checkedAt > 0) return mvFormat(T('updateLatest'), {
+        version: update.installed ?? MV_PLUGIN_VERSION
+    });
+    return T('updateIdle');
+}
+function MvUpdateButton() {
+    const update = useMvUpdate();
+    const [open, setOpen] = React.useState(false);
+    const caption = mvUpdateCaption(update);
+    return h(React.Fragment, null, h('button', {
+        type: 'button',
+        className: 'mv-icon mv-update',
+        'data-has-update': update.available === true ? 'true' : 'false',
+        'data-busy': update.status === 'checking' || update.status === 'installing' ? 'true' : 'false',
+        title: caption,
+        'aria-label': T('updateCheck'),
+        onClick: ()=>{
+            setOpen(true);
+            if (update.available !== true) void mvUpdateCheck(true);
+        }
+    }, MvGlyph(MV_ICON.refresh)), open ? h(MvUpdateDialog, {
+        update,
+        caption,
+        onClose: ()=>setOpen(false)
+    }) : null);
+}
+function MvUpdateDialog(props) {
+    const { update, caption, onClose } = props;
+    const busy = update.status === 'installing';
+    const canInstall = update.available === true && !busy && update.localOnly !== true;
+    const body = h('div', {
+        className: 'mv-dialog-body'
+    }, h('div', {
+        className: 'mv-dialog-title'
+    }, T('updateCheck')), h('div', {
+        className: 'mv-dialog-text'
+    }, caption), update.status === 'installing' && update.operationState !== null ? h('div', {
+        className: 'mv-dialog-text'
+    }, String(update.operationState)) : null, update.status === 'done' && update.restartRequired === true && update.restartSupported === true ? h('div', {
+        className: 'mv-dialog-text'
+    }, T('updateDone')) : null);
+    const actions = h('div', {
+        className: 'mv-dialog-actions'
+    }, h('button', {
+        type: 'button',
+        className: 'mv-dialog-button',
+        onClick: onClose
+    }, T('cancel')), canInstall ? h('button', {
+        type: 'button',
+        className: 'mv-dialog-button mv-dialog-button--primary',
+        onClick: ()=>void mvUpdateInstall()
+    }, T('updateInstall')) : update.available !== true && update.status !== 'installing' ? h('button', {
+        type: 'button',
+        className: 'mv-dialog-button',
+        onClick: ()=>void mvUpdateCheck(true)
+    }, T('updateCheck')) : null);
+    return h('div', {
+        className: 'mv-dialog-backdrop',
+        onClick: (event)=>{
+            if (event.target === event.currentTarget) onClose();
+        }
+    }, h('div', {
+        className: 'mv-dialog',
+        role: 'dialog',
+        'aria-label': T('updateCheck')
+    }, body, actions));
+}
+function MvViewsButton(props) {
+    const { views, currentKey } = props;
+    const [open, setOpen] = React.useState(false);
+    return h('div', {
+        className: 'mv-views'
+    }, h('button', {
+        type: 'button',
+        className: 'mv-chip mv-views-toggle',
+        'data-active': open ? 'true' : 'false',
+        title: T('views'),
+        onClick: ()=>setOpen((value)=>!value)
+    }, T('views'), views.length > 0 ? h('span', {
+        className: 'mv-views-count'
+    }, String(views.length)) : null), open ? h('div', {
+        className: 'mv-views-pop',
+        role: 'menu',
+        'aria-label': T('views')
+    }, views.length === 0 ? h('div', {
+        className: 'mv-views-empty'
+    }, T('viewsEmpty')) : views.map((view)=>h('div', {
+            key: view.id,
+            className: 'mv-views-row',
+            'data-active': view.id === currentKey ? 'true' : 'false'
+        }, h('button', {
+            type: 'button',
+            className: 'mv-views-name',
+            title: T('viewsHint'),
+            onClick: ()=>{
+                mvApplyView(view.id);
+                setOpen(false);
+            }
+        }, view.name), h('button', {
+            type: 'button',
+            className: 'mv-views-del',
+            title: T('viewsDelete'),
+            'aria-label': T('viewsDelete'),
+            onClick: (event)=>{
+                event.stopPropagation();
+                mvDeleteView(view.id);
+            }
+        }, '✕')))) : null);
+}
 function MultiviewStage(props) {
     const { renderSlot, SessionProvider, useSessions, useSessionStatus } = props;
     const list = useSessions((state)=>state);
@@ -1138,10 +1641,13 @@ function MultiviewStage(props) {
     });
     React.useEffect(()=>{
         mvReconcile();
-        mvAutoFill();
     }, [
         list
     ]);
+    React.useEffect(()=>{
+        mvUpdateHydrate();
+        mvUpdateMaybeAutoCheck();
+    }, []);
     React.useEffect(()=>{
         const element = rootRef.current;
         if (element === null || typeof ResizeObserver !== 'function') return undefined;
@@ -1291,11 +1797,14 @@ function MultiviewStage(props) {
         className: 'mv-chip',
         'data-active': 'true',
         onClick: mvRestore
-    }, T('restore')), h('span', {
+    }, T('restore')), h(MvViewsButton, {
+        views: state.views ?? [],
+        currentKey: mvViewKey(state.layout)
+    }), h('span', {
         className: 'mv-bar-spacer'
     }), h('div', {
         className: 'mv-strip'
-    }, chips)), h(MvStageBoundary, null, body));
+    }, chips), h(MvUpdateButton, null)), h(MvStageBoundary, null, body));
 }
 
 const MV_INJECT = [

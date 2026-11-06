@@ -26,7 +26,9 @@ A "Split" icon appears in the left panel list; click it to turn the central colu
 | Maximize / restore | The ⤢ button in the pane header; the stage bar shows "Restore" |
 | Bind an empty pane | Search and pick a session right inside the pane |
 | Open in the native view | The ↗ button: hands the session back to the real conversation (the right sidebar's file preview and diff review only exist there) |
-| Remove a pane | The ✕ button; the last pane is cleared, never closes the panel |
+| Remove a pane | The ✕ button; a bound pane goes **back to the session list** (the split keeps its shape), an empty pane is what ✕ actually removes |
+| Views | Bar → Views: a split with 2+ sessions is remembered automatically; click to restore, ✕ to delete |
+| Check for updates | Refresh icon at the right of the bar: checked every 24h, red dot on a new release, confirm to update |
 
 Shortcuts (module defaults; rebind in **Settings → Shortcuts**):
 

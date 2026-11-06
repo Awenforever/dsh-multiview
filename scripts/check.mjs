@@ -46,8 +46,18 @@ ok(client.includes("id: 'dsh-multiview'"), 'client.js loader id must equal the p
 ok(/return \{ inject: MV_INJECT, apply \}/.test(client), 'client.js must export inject/apply')
 ok(!/\beval\s*\(/.test(client), 'client.js must not call eval')
 ok(!/new Function\s*\(/.test(client), 'client.js must not build functions from strings')
-ok(!/\bfetch\s*\(/.test(client), 'client.js must not perform network requests')
 ok(!/XMLHttpRequest/.test(client), 'client.js must not perform network requests')
+ok(!/https?:\/\//.test(client.replace(/https?:\/\/[^\s'"]*schema[^\s'"]*/g, '')), 'client.js must not embed endpoints')
+const fetchCalls = (client.match(/\bfetch\(/g) ?? []).length
+ok(fetchCalls <= 2, `client.js must only talk to the market API (found ${fetchCalls} fetch calls)`)
+ok(
+  fetchCalls === 0 || client.includes('/dsh-market/api/v1/capabilities'),
+  'network access must stay on the plugin market same-origin API',
+)
+ok(
+  client.includes(`const MV_PLUGIN_VERSION = '${pkg.version}'`),
+  'client.js version constant must equal package.json version',
+)
 ok(!/https?:\/\//.test(client.replace(/https?:\/\/[^\s'"]*schema[^\s'"]*/g, '')), 'client.js must not embed endpoints')
 ok(clientBytes < 160 * 1024, `client.js is ${clientBytes} bytes, over the 160 KiB budget`)
 ok(host.includes('export function apply'), 'index.js must export a Host apply')

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 /** Concatenation order: each file may use the names declared above it. */
-const CLIENT_ORDER = ['i18n', 'compat', 'model', 'store', 'chrome', 'pane', 'stage', 'index']
+const CLIENT_ORDER = ['i18n', 'compat', 'model', 'store', 'update', 'chrome', 'pane', 'stage', 'index']
 const CLIENT_OUT = join(ROOT, 'client.js')
 const HOST_OUT = join(ROOT, 'index.js')
 
@@ -29,7 +29,7 @@ function stripHost(source) {
 function buildClient() {
   const body = CLIENT_ORDER.map((name) => strip(readFileSync(join(ROOT, 'src', 'client', `${name}.ts`), 'utf8'))).join('\n')
   const out = `/**
- * dsh-multiview — Client half.
+ * dsh-multiview 鈥?Client half.
  * Generated from src/client/*.ts by scripts/build.mjs. Do not edit by hand.
  */
 window.__ModuleLoader__.load({
@@ -49,7 +49,7 @@ ${body}
 function buildHost() {
   const body = stripHost(readFileSync(join(ROOT, 'src', 'host', 'index.ts'), 'utf8')).trim()
   const out = `/**
- * dsh-multiview — Host half.
+ * dsh-multiview 鈥?Host half.
  * Generated from src/host/index.ts by scripts/build.mjs. Do not edit by hand.
  */
 ${body}

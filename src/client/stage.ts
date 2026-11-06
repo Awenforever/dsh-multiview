@@ -273,6 +273,170 @@ class MvStageBoundary extends React.Component {
   }
 }
 
+/** Live update snapshot. */
+function useMvUpdate() {
+  return React.useSyncExternalStore(mvUpdateSubscribe, mvUpdateGetState, mvUpdateGetState)
+}
+
+/** Short one-line status for the update button's tooltip. */
+function mvUpdateCaption(update: any): string {
+  if (update.status === 'checking') return T('updateChecking')
+  if (update.status === 'installing') return T('updateInstalling')
+  if (update.status === 'done') return T('updateDone')
+  if (update.status === 'unsupported') return T('updateUnsupported')
+  if (update.status === 'error') return mvFormat(T('updateFailed'), { message: update.error ?? '' })
+  if (update.available === true) return mvFormat(T('updateAvailable'), { version: update.latest ?? '' })
+  if (update.localOnly === true) return T('updateLocal')
+  if (update.checkedAt > 0) return mvFormat(T('updateLatest'), { version: update.installed ?? MV_PLUGIN_VERSION })
+  return T('updateIdle')
+}
+
+/** Update surface: one icon, a red dot when a release exists, a confirm dialog. */
+function MvUpdateButton() {
+  const update = useMvUpdate()
+  const [open, setOpen] = React.useState(false)
+  const caption = mvUpdateCaption(update)
+  return h(
+    React.Fragment,
+    null,
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'mv-icon mv-update',
+        'data-has-update': update.available === true ? 'true' : 'false',
+        'data-busy': update.status === 'checking' || update.status === 'installing' ? 'true' : 'false',
+        title: caption,
+        'aria-label': T('updateCheck'),
+        onClick: () => {
+          setOpen(true)
+          if (update.available !== true) void mvUpdateCheck(true)
+        },
+      },
+      MvGlyph(MV_ICON.refresh),
+    ),
+    open ? h(MvUpdateDialog, { update, caption, onClose: () => setOpen(false) }) : null,
+  )
+}
+
+/** Confirm-and-run dialog for the market's own update operation. */
+function MvUpdateDialog(props) {
+  const { update, caption, onClose } = props
+  const busy = update.status === 'installing'
+  const canInstall = update.available === true && !busy && update.localOnly !== true
+  const body = h(
+    'div',
+    { className: 'mv-dialog-body' },
+    h('div', { className: 'mv-dialog-title' }, T('updateCheck')),
+    h('div', { className: 'mv-dialog-text' }, caption),
+    update.status === 'installing' && update.operationState !== null
+      ? h('div', { className: 'mv-dialog-text' }, String(update.operationState))
+      : null,
+    update.status === 'done' && update.restartRequired === true && update.restartSupported === true
+      ? h('div', { className: 'mv-dialog-text' }, T('updateDone'))
+      : null,
+  )
+  const actions = h(
+    'div',
+    { className: 'mv-dialog-actions' },
+    h('button', { type: 'button', className: 'mv-dialog-button', onClick: onClose }, T('cancel')),
+    canInstall
+      ? h(
+          'button',
+          {
+            type: 'button',
+            className: 'mv-dialog-button mv-dialog-button--primary',
+            onClick: () => void mvUpdateInstall(),
+          },
+          T('updateInstall'),
+        )
+      : update.available !== true && update.status !== 'installing'
+        ? h(
+            'button',
+            {
+              type: 'button',
+              className: 'mv-dialog-button',
+              onClick: () => void mvUpdateCheck(true),
+            },
+            T('updateCheck'),
+          )
+        : null,
+  )
+  return h(
+    'div',
+    {
+      className: 'mv-dialog-backdrop',
+      onClick: (event: any) => {
+        if (event.target === event.currentTarget) onClose()
+      },
+    },
+    h('div', { className: 'mv-dialog', role: 'dialog', 'aria-label': T('updateCheck') }, body, actions),
+  )
+}
+
+/** Saved splits: auto-captured whenever two or more panes are bound. */
+function MvViewsButton(props) {
+  const { views, currentKey } = props
+  const [open, setOpen] = React.useState(false)
+  return h(
+    'div',
+    { className: 'mv-views' },
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'mv-chip mv-views-toggle',
+        'data-active': open ? 'true' : 'false',
+        title: T('views'),
+        onClick: () => setOpen((value) => !value),
+      },
+      T('views'),
+      views.length > 0 ? h('span', { className: 'mv-views-count' }, String(views.length)) : null,
+    ),
+    open
+      ? h(
+          'div',
+          { className: 'mv-views-pop', role: 'menu', 'aria-label': T('views') },
+          views.length === 0
+            ? h('div', { className: 'mv-views-empty' }, T('viewsEmpty'))
+            : views.map((view) =>
+                h(
+                  'div',
+                  { key: view.id, className: 'mv-views-row', 'data-active': view.id === currentKey ? 'true' : 'false' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'mv-views-name',
+                      title: T('viewsHint'),
+                      onClick: () => {
+                        mvApplyView(view.id)
+                        setOpen(false)
+                      },
+                    },
+                    view.name,
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'mv-views-del',
+                      title: T('viewsDelete'),
+                      'aria-label': T('viewsDelete'),
+                      onClick: (event: any) => {
+                        event.stopPropagation()
+                        mvDeleteView(view.id)
+                      },
+                    },
+                    '✕',
+                  ),
+                ),
+              ),
+        )
+      : null,
+  )
+}
+
 /** Occupant of the `main` panel key: the whole split surface. */
 function MultiviewStage(props) {
   const { renderSlot, SessionProvider, useSessions, useSessionStatus } = props
@@ -286,8 +450,12 @@ function MultiviewStage(props) {
 
   React.useEffect(() => {
     mvReconcile()
-    mvAutoFill()
   }, [list])
+
+  React.useEffect(() => {
+    mvUpdateHydrate()
+    mvUpdateMaybeAutoCheck()
+  }, [])
 
   React.useEffect(() => {
     const element = rootRef.current
@@ -422,8 +590,10 @@ function MultiviewStage(props) {
       state.maximized === null
         ? null
         : h('button', { type: 'button', className: 'mv-chip', 'data-active': 'true', onClick: mvRestore }, T('restore')),
+      h(MvViewsButton, { views: state.views ?? [], currentKey: mvViewKey(state.layout) }),
       h('span', { className: 'mv-bar-spacer' }),
       h('div', { className: 'mv-strip' }, chips),
+      h(MvUpdateButton, null),
     ),
     h(MvStageBoundary, null, body),
   )
