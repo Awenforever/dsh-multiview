@@ -1,0 +1,32 @@
+name: publish
+
+# Publishes to npm when a version tag is pushed: `git tag v0.1.4 && git push --tags`.
+# Requires the repository secret NPM_TOKEN (an automation token with publish rights).
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build and verify
+        run: |
+          node --disable-warning=ExperimentalWarning scripts/build.mjs
+          node scripts/check.mjs
+          node --disable-warning=ExperimentalWarning --test test/model.test.ts
+
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

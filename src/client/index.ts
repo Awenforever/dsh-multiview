@@ -180,6 +180,7 @@ function apply(ctx) {
       paneEntries: () => (PTX.slots.entries(MV_PANE_SLOT) || []).length,
       open: () => PTX.layout.selectPanel(MV_PANEL_ID),
       close: () => PTX.layout.selectPanel(null),
+      workspaces: () => PTX.workspaces.list.getSnapshot(),
     }
   }
 }

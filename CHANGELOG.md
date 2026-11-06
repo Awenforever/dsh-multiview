@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-11-06
+
+### 新增
+
+- **按工作区分组的会话列表**：列表按工作区分组（顺序跟侧栏一致，默认工作区在前），组名作为小标题；只有一个工作区时不显示标题，保持干净。
+- 发布准备：package.json 去掉 private，补 keywords（含 dsh-plugin）、homepage、ugs、publishConfig，prepack 自动跑构建 + 自检。
+
 ## 0.1.3 — 2026-11-06
 
 ### 变更

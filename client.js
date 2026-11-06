@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.3';
+const MV_PLUGIN_VERSION = '0.1.4';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1041,6 +1041,7 @@ const MV_CSS = `
 .mv-picker-item[data-depth="1"]{color:var(--dsw-alias-label-secondary);font-size:12px}
 .mv-picker-item[data-depth="1"]:hover{color:var(--dsw-alias-label-primary)}
 .mv-picker-empty{padding:12px 8px;font-size:13px;color:var(--dsw-alias-label-tertiary)}
+.mv-picker-group{padding:10px 8px 4px;font-size:11px;font-weight:600;letter-spacing:0.02em;color:var(--dsw-alias-label-tertiary);text-transform:none}
 .mv-views{position:relative;display:inline-flex}
 .mv-views-count{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
 .mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base)}
@@ -1292,50 +1293,88 @@ function mvPickableRows(query) {
             if (mvIsArchived(id)) continue;
             rows.set(id, row);
         }
+        const snapshot = PTX.workspaces.list.getSnapshot();
+        const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+        const workspaceOf = new Map();
+        for (const item of items){
+            for (const id of item.sessionIds ?? [])workspaceOf.set(id, item.workspaceId);
+        }
+        const groups = [];
+        for (const item of items){
+            const ids = (item.sessionIds ?? []).filter((id)=>rows.has(id));
+            if (ids.length === 0) continue;
+            const label = item.title ?? String(item.path ?? '').split(/[\\/]/).pop() ?? item.workspaceId;
+            groups.push({
+                key: String(item.workspaceId),
+                label: String(label),
+                ids
+            });
+        }
+        const loose = [
+            ...rows.keys()
+        ].filter((id)=>!workspaceOf.has(id));
+        if (loose.length > 0) groups.push({
+            key: '__loose__',
+            label: '',
+            ids: loose
+        });
+        if (groups.length === 0) return [];
         const rank = (id)=>{
             const value = rows.get(id)?.updatedAt;
             return typeof value === 'number' ? value : 0;
         };
-        const children = new Map();
-        const roots = [];
-        const orphan = new Set();
-        for (const id of rows.keys()){
-            const parentId = rows.get(id)?.parentId;
-            if (typeof parentId !== 'string' || parentId === id) {
-                roots.push(id);
-                continue;
+        const out = [];
+        const multiple = groups.filter((group)=>group.ids.length > 0 && group.label !== '').length > 1;
+        for (const group of groups){
+            const scoped = new Set(group.ids);
+            const children = new Map();
+            const roots = [];
+            const orphan = new Set();
+            for (const id of group.ids){
+                const parentId = rows.get(id)?.parentId;
+                if (typeof parentId !== 'string' || parentId === id) {
+                    roots.push(id);
+                    continue;
+                }
+                if (scoped.has(parentId)) {
+                    const bucket = children.get(parentId);
+                    if (bucket === undefined) children.set(parentId, [
+                        id
+                    ]);
+                    else bucket.push(id);
+                } else {
+                    orphan.add(id);
+                    roots.push(id);
+                }
             }
-            if (rows.has(parentId)) {
-                const bucket = children.get(parentId);
-                if (bucket === undefined) children.set(parentId, [
-                    id
-                ]);
-                else bucket.push(id);
-            } else {
-                orphan.add(id);
-                roots.push(id);
+            const byRank = (left, right)=>rank(right) - rank(left);
+            roots.sort(byRank);
+            for (const bucket of children.values())bucket.sort(byRank);
+            const before = out.length;
+            const append = (id, depth)=>{
+                const row = rows.get(id);
+                if (row === undefined) return;
+                const raw = row.title === undefined || row.title === '' ? id : row.title;
+                const shown = orphan.has(id) ? Math.max(depth, 1) : depth;
+                const title = shown > 0 ? '↳ ' + raw : raw;
+                const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need);
+                if (matched) out.push({
+                    id,
+                    title,
+                    depth: shown
+                });
+                for (const childId of children.get(id) ?? [])append(childId, Math.min(shown + 1, 3));
+            };
+            for (const id of roots)append(id, 0);
+            if (multiple && out.length > before && group.label !== '') {
+                out.splice(before, 0, {
+                    kind: 'group',
+                    id: group.key,
+                    title: group.label
+                });
             }
         }
-        const byRank = (left, right)=>rank(right) - rank(left);
-        roots.sort(byRank);
-        for (const bucket of children.values())bucket.sort(byRank);
-        const out = [];
-        const append = (id, depth)=>{
-            const row = rows.get(id);
-            if (row === undefined) return;
-            const raw = row.title === undefined || row.title === '' ? id : row.title;
-            const shown = orphan.has(id) ? Math.max(depth, 1) : depth;
-            const title = shown > 0 ? '↳ ' + raw : raw;
-            const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need);
-            if (matched) out.push({
-                id,
-                title,
-                depth: shown
-            });
-            for (const childId of children.get(id) ?? [])append(childId, Math.min(shown + 1, 3));
-        };
-        for (const id of roots)append(id, 0);
-        return out.slice(0, 200);
+        return out.slice(0, 240);
     } catch (error) {
         return [];
     }
@@ -1363,7 +1402,11 @@ function MvPanePicker(props) {
         className: 'mv-picker-list'
     }, rows.length === 0 ? h('div', {
         className: 'mv-picker-empty'
-    }, T('pickEmpty')) : rows.map((row)=>h('button', {
+    }, T('pickEmpty')) : rows.map((row)=>row.kind === 'group' ? h('div', {
+            key: 'group-' + row.id,
+            className: 'mv-picker-group',
+            role: 'presentation'
+        }, row.title) : h('button', {
             key: row.id,
             type: 'button',
             className: 'mv-picker-item',
@@ -2016,7 +2059,8 @@ function apply(ctx) {
             panelInfo: ()=>PTX.layout.panelInfo.getSnapshot(),
             paneEntries: ()=>(PTX.slots.entries(MV_PANE_SLOT) || []).length,
             open: ()=>PTX.layout.selectPanel(MV_PANEL_ID),
-            close: ()=>PTX.layout.selectPanel(null)
+            close: ()=>PTX.layout.selectPanel(null),
+            workspaces: ()=>PTX.workspaces.list.getSnapshot()
         };
     }
 }

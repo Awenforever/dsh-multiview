@@ -62,6 +62,7 @@ const MV_CSS = `
 .mv-picker-item[data-depth="1"]{color:var(--dsw-alias-label-secondary);font-size:12px}
 .mv-picker-item[data-depth="1"]:hover{color:var(--dsw-alias-label-primary)}
 .mv-picker-empty{padding:12px 8px;font-size:13px;color:var(--dsw-alias-label-tertiary)}
+.mv-picker-group{padding:10px 8px 4px;font-size:11px;font-weight:600;letter-spacing:0.02em;color:var(--dsw-alias-label-tertiary);text-transform:none}
 .mv-views{position:relative;display:inline-flex}
 .mv-views-count{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
 .mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base)}

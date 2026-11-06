@@ -1,15 +1,28 @@
 {
   "name": "dsh-multiview",
-  "version": "0.1.3",
-  "private": true,
+  "version": "0.1.4",
+  "description": "Multi-view for DeepSeek Harness: 2-4 live conversations side by side, each pane a real Chat, with resize, swap, saved splits and pane focus.",
   "type": "module",
-  "description": "Multi-view for DeepSeek Harness: 2-4 live conversations side by side, each pane a real Chat, with resize, swap and pane focus.",
   "license": "MIT",
   "author": "Awenforever",
+  "homepage": "https://github.com/Awenforever/dsh-multiview#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Awenforever/dsh-multiview.git"
   },
+  "bugs": {
+    "url": "https://github.com/Awenforever/dsh-multiview/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "multiview",
+    "split-view",
+    "split-screen",
+    "panel"
+  ],
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -35,7 +48,12 @@
   "scripts": {
     "build": "node --disable-warning=ExperimentalWarning scripts/build.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts"
+    "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts",
+    "prepack": "node --disable-warning=ExperimentalWarning scripts/build.mjs && node scripts/check.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "dsh": {
     "bundle": {

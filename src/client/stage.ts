@@ -57,46 +57,73 @@ function mvPickableRows(query: string): any[] {
       if (mvIsArchived(id)) continue
       rows.set(id, row)
     }
+
+    /* Workspace grouping follows the sidebar's own order, default workspace first. */
+    const snapshot = PTX.workspaces.list.getSnapshot()
+    const items = Array.isArray(snapshot?.items) ? snapshot.items : []
+    const workspaceOf = new Map<string, string>()
+    for (const item of items) {
+      for (const id of item.sessionIds ?? []) workspaceOf.set(id, item.workspaceId)
+    }
+    const groups: { key: string; label: string; ids: string[] }[] = []
+    for (const item of items) {
+      const ids = (item.sessionIds ?? []).filter((id: string) => rows.has(id))
+      if (ids.length === 0) continue
+      const label = item.title ?? String(item.path ?? '').split(/[\\/]/).pop() ?? item.workspaceId
+      groups.push({ key: String(item.workspaceId), label: String(label), ids })
+    }
+    const loose = [...rows.keys()].filter((id) => !workspaceOf.has(id))
+    if (loose.length > 0) groups.push({ key: '__loose__', label: '', ids: loose })
+    if (groups.length === 0) return []
+
     const rank = (id: string): number => {
       const value = rows.get(id)?.updatedAt
       return typeof value === 'number' ? value : 0
     }
-    const children = new Map<string, string[]>()
-    const roots: string[] = []
-    const orphan = new Set<string>()
-    for (const id of rows.keys()) {
-      const parentId = rows.get(id)?.parentId
-      if (typeof parentId !== 'string' || parentId === id) {
-        roots.push(id)
-        continue
-      }
-      if (rows.has(parentId)) {
-        const bucket = children.get(parentId)
-        if (bucket === undefined) children.set(parentId, [id])
-        else bucket.push(id)
-      } else {
-        /* Its parent is blank or archived: still a child, so keep it indented. */
-        orphan.add(id)
-        roots.push(id)
-      }
-    }
-    const byRank = (left: string, right: string): number => rank(right) - rank(left)
-    roots.sort(byRank)
-    for (const bucket of children.values()) bucket.sort(byRank)
-
     const out: any[] = []
-    const append = (id: string, depth: number): void => {
-      const row = rows.get(id)
-      if (row === undefined) return
-      const raw = row.title === undefined || row.title === '' ? id : row.title
-      const shown = orphan.has(id) ? Math.max(depth, 1) : depth
-      const title = shown > 0 ? '↳ ' + raw : raw
-      const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need)
-      if (matched) out.push({ id, title, depth: shown })
-      for (const childId of children.get(id) ?? []) append(childId, Math.min(shown + 1, 3))
+    const multiple = groups.filter((group) => group.ids.length > 0 && group.label !== '').length > 1
+
+    for (const group of groups) {
+      const scoped = new Set(group.ids)
+      const children = new Map<string, string[]>()
+      const roots: string[] = []
+      const orphan = new Set<string>()
+      for (const id of group.ids) {
+        const parentId = rows.get(id)?.parentId
+        if (typeof parentId !== 'string' || parentId === id) {
+          roots.push(id)
+          continue
+        }
+        if (scoped.has(parentId)) {
+          const bucket = children.get(parentId)
+          if (bucket === undefined) children.set(parentId, [id])
+          else bucket.push(id)
+        } else {
+          orphan.add(id)
+          roots.push(id)
+        }
+      }
+      const byRank = (left: string, right: string): number => rank(right) - rank(left)
+      roots.sort(byRank)
+      for (const bucket of children.values()) bucket.sort(byRank)
+
+      const before = out.length
+      const append = (id: string, depth: number): void => {
+        const row = rows.get(id)
+        if (row === undefined) return
+        const raw = row.title === undefined || row.title === '' ? id : row.title
+        const shown = orphan.has(id) ? Math.max(depth, 1) : depth
+        const title = shown > 0 ? '↳ ' + raw : raw
+        const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need)
+        if (matched) out.push({ id, title, depth: shown })
+        for (const childId of children.get(id) ?? []) append(childId, Math.min(shown + 1, 3))
+      }
+      for (const id of roots) append(id, 0)
+      if (multiple && out.length > before && group.label !== '') {
+        out.splice(before, 0, { kind: 'group', id: group.key, title: group.label })
+      }
     }
-    for (const id of roots) append(id, 0)
-    return out.slice(0, 200)
+    return out.slice(0, 240)
   } catch (error) {
     return []
   }
@@ -129,19 +156,21 @@ function MvPanePicker(props) {
       rows.length === 0
         ? h('div', { className: 'mv-picker-empty' }, T('pickEmpty'))
         : rows.map((row) =>
-            h(
-              'button',
-              {
-                key: row.id,
-                type: 'button',
-                className: 'mv-picker-item',
-                'data-depth': String(row.depth ?? 0),
-                style: row.depth === 0 ? undefined : { paddingLeft: String(8 + row.depth * 14) + 'px' },
-                title: row.title,
-                onClick: () => onPick(row.id),
-              },
-              row.title,
-            ),
+            row.kind === 'group'
+              ? h('div', { key: 'group-' + row.id, className: 'mv-picker-group', role: 'presentation' }, row.title)
+              : h(
+                  'button',
+                  {
+                    key: row.id,
+                    type: 'button',
+                    className: 'mv-picker-item',
+                    'data-depth': String(row.depth ?? 0),
+                    style: row.depth === 0 ? undefined : { paddingLeft: String(8 + row.depth * 14) + 'px' },
+                    title: row.title,
+                    onClick: () => onPick(row.id),
+                  },
+                  row.title,
+                ),
           ),
     ),
   )
