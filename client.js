@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.5';
+const MV_PLUGIN_VERSION = '0.1.6';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -442,7 +442,8 @@ function mvInitialState() {
         preset: 2,
         seeded: false,
         reconciled: false,
-        views: []
+        views: [],
+        currentViewId: null
     };
 }
 let mvState = mvInitialState();
@@ -463,12 +464,13 @@ function mvScheduleSave() {
         mvSaveTimer = 0;
         try {
             const durable = {
-                version: 2,
+                version: 3,
                 layout: mvState.layout,
                 focused: mvState.focused,
                 preset: mvState.preset,
                 seeded: mvState.seeded,
-                views: mvState.views
+                views: mvState.views,
+                currentViewId: mvState.currentViewId
             };
             window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable));
         } catch (error) {}
@@ -488,38 +490,64 @@ function mvViewName(layout) {
     if (titles.length === 0) return T('viewsCurrent');
     return titles.join('  |  ');
 }
-function mvCaptureView(layout, views) {
+function mvViewWorthy(layout) {
     const key = mvViewKey(layout);
-    if (key === '' || key.indexOf(',') < 0) return null;
+    return key !== '' && key.indexOf(',') >= 0;
+}
+function mvSyncView(next) {
+    const views = next.views ?? [];
+    const worthy = mvViewWorthy(next.layout);
+    const current = views.find((view)=>view.id === next.currentViewId) ?? null;
+    if (!worthy) {
+        if (current === null) return next;
+        return {
+            ...next,
+            views: views.filter((view)=>view.id !== current.id),
+            currentViewId: null
+        };
+    }
+    if (current !== null) {
+        return {
+            ...next,
+            views: views.map((view)=>view.id === current.id ? {
+                    ...view,
+                    layout: next.layout,
+                    name: mvViewName(next.layout)
+                } : view)
+        };
+    }
+    const key = mvViewKey(next.layout);
     const existing = views.find((view)=>view.id === key);
     if (existing !== undefined) {
-        if (existing.layout === layout) return null;
-        return views.map((view)=>view.id === key ? {
-                ...view,
-                layout
-            } : view);
+        return {
+            ...next,
+            currentViewId: existing.id,
+            views: views.map((view)=>view.id === existing.id ? {
+                    ...view,
+                    layout: next.layout,
+                    name: mvViewName(next.layout)
+                } : view)
+        };
     }
-    const next = [
-        {
-            id: key,
-            name: mvViewName(layout),
-            layout,
-            savedAt: Date.now()
-        },
-        ...views
-    ];
-    return next.slice(0, 12);
+    const created = {
+        id: key,
+        name: mvViewName(next.layout),
+        layout: next.layout,
+        savedAt: Date.now()
+    };
+    return {
+        ...next,
+        currentViewId: created.id,
+        views: [
+            created,
+            ...views
+        ].slice(0, 12)
+    };
 }
 function mvCommit(produce) {
     const produced = produce(mvState);
     if (produced === mvState || produced === null || produced === undefined) return;
-    let next = produced;
-    const captured = mvCaptureView(next.layout, next.views ?? []);
-    if (captured !== null) next = {
-        ...next,
-        views: captured
-    };
-    mvState = next;
+    mvState = mvSyncView(produced);
     mvScheduleSave();
     for (const listener of mvListeners){
         try {
@@ -532,11 +560,9 @@ function mvCommit(produce) {
 function mvSanitizeView(raw) {
     if (raw === null || typeof raw !== 'object') return null;
     const layout = mvSanitize(raw.layout);
-    if (layout === null) return null;
-    const key = mvViewKey(layout);
-    if (key === '' || key.indexOf(',') < 0) return null;
+    if (layout === null || !mvViewWorthy(layout)) return null;
     return {
-        id: key,
+        id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : mvViewKey(layout),
         name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'),
         layout,
         savedAt: typeof raw.savedAt === 'number' ? raw.savedAt : Date.now()
@@ -550,12 +576,13 @@ function mvHydrate() {
         raw = null;
     }
     if (raw === null || typeof raw !== 'object') return;
-    if (raw.version !== 1 && raw.version !== 2) return;
+    if (raw.version !== 1 && raw.version !== 2 && raw.version !== 3) return;
     const layout = mvSanitize(raw.layout);
     if (layout === null) return;
     const leaves = mvLeaves(layout);
     const focused = leaves.some((leaf)=>leaf.id === raw.focused) ? raw.focused : leaves[0].id;
     const views = Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view)=>view !== null) : [];
+    const currentViewId = typeof raw.currentViewId === 'string' && views.some((view)=>view.id === raw.currentViewId) ? raw.currentViewId : null;
     mvState = {
         layout,
         focused,
@@ -563,14 +590,16 @@ function mvHydrate() {
         preset: typeof raw.preset === 'number' ? raw.preset : leaves.length,
         seeded: raw.seeded === true,
         reconciled: false,
-        views
+        views,
+        currentViewId
     };
 }
 function mvReset() {
     const views = mvState.views;
     mvCommit(()=>({
             ...mvInitialState(),
-            views
+            views,
+            currentViewId: null
         }));
     try {
         window.localStorage.removeItem(MV_STORAGE_KEY);
@@ -601,6 +630,45 @@ function mvReconcile() {
                 reconciled: true
             }));
     }
+}
+function mvOpenForSession(sessionId) {
+    if (sessionId === null) return;
+    mvCommit((current)=>{
+        const owners = current.views.filter((view)=>mvViewKey(view.layout).split(',').includes(sessionId));
+        const owner = owners[0];
+        if (owner !== undefined) {
+            if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) return current;
+            return {
+                ...current,
+                layout: owner.layout,
+                currentViewId: owner.id,
+                maximized: null,
+                preset: mvLeaves(owner.layout).length
+            };
+        }
+        if (mvViewKey(current.layout).split(',').includes(sessionId)) {
+            return current.currentViewId === null ? {
+                ...current,
+                currentViewId: null
+            } : current;
+        }
+        const layout = mvWithSession(mvPreset(2), 'p1', sessionId);
+        return {
+            ...current,
+            layout,
+            currentViewId: null,
+            focused: 'p1',
+            preset: 2,
+            maximized: null
+        };
+    });
+}
+function mvViewOwner(sessionId, views, currentViewId) {
+    for (const view of views){
+        if (view.id === currentViewId) continue;
+        if (mvViewKey(view.layout).split(',').includes(sessionId)) return view;
+    }
+    return null;
 }
 function mvSetShape(count) {
     mvCommit((current)=>{
@@ -709,15 +777,30 @@ function mvApplyView(viewId) {
             layout: view.layout,
             focused: leaves[0].id,
             preset: leaves.length,
-            maximized: null
+            maximized: null,
+            currentViewId: view.id
         };
     });
 }
-function mvDeleteView(viewId) {
-    mvCommit((current)=>current.views.some((item)=>item.id === viewId) ? {
+function mvStartView() {
+    mvCommit((current)=>({
             ...current,
-            views: current.views.filter((item)=>item.id !== viewId)
-        } : current);
+            layout: mvPreset(2),
+            focused: 'p1',
+            preset: 2,
+            maximized: null,
+            currentViewId: null
+        }));
+}
+function mvDeleteView(viewId) {
+    mvCommit((current)=>{
+        if (!current.views.some((item)=>item.id === viewId)) return current;
+        return {
+            ...current,
+            views: current.views.filter((item)=>item.id !== viewId),
+            currentViewId: current.currentViewId === viewId ? null : current.currentViewId
+        };
+    });
 }
 
 const MV_UPDATE_KEY = 'dsh.multiview.update.v1';
@@ -1036,7 +1119,7 @@ const MV_CSS = `
 .mv-picker-search{height:30px;flex:none;margin:0 0 8px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;outline:none}
 .mv-picker-search:focus{border-color:var(--dsw-alias-state-business-primary)}
 .mv-picker-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-.mv-picker-item{display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-size:13px;line-height:18px}
+.mv-picker-item{display:flex;flex-direction:row;justify-content:space-between;gap:8px;align-items:center;width:100%;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-size:13px;line-height:18px}
 .mv-picker-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-picker-item[data-depth="1"]{color:var(--dsw-alias-label-secondary);font-size:12px}
 .mv-picker-item[data-depth="1"]:hover{color:var(--dsw-alias-label-primary)}
@@ -1066,6 +1149,15 @@ const MV_CSS = `
 .mv-dialog-button{height:28px;padding:0 12px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}
 .mv-dialog-button:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-dialog-button--primary{border-color:transparent;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-bg-base)}
+.mv-picker-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv-picker-owner{flex:none;max-width:45%;padding:0 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv-picker-item[data-owned="true"]{opacity:0.45;cursor:not-allowed}
+.mv-picker-item[data-owned="true"]:hover{background:transparent}
+.mv-bar{color:var(--dsw-alias-label-secondary)}
+.mv-icon{color:var(--dsw-alias-label-secondary)}
+.mv-icon:hover{color:var(--dsw-alias-label-primary)}
+.mv-chip{color:var(--dsw-alias-label-secondary)}
+.mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
 `;
 function MvGlyph(props) {
@@ -1285,7 +1377,7 @@ function mvDotLabel(state) {
     if (state === 'unread') return T('unread');
     return '';
 }
-function mvPickableRows(query) {
+function mvPickableRows(query, views = [], currentViewId = null) {
     const need = query.trim().toLowerCase();
     try {
         const list = PTX.sessions.list.getSnapshot();
@@ -1361,10 +1453,12 @@ function mvPickableRows(query) {
                 const shown = orphan.has(id) ? Math.max(depth, 1) : depth;
                 const title = shown > 0 ? '↳ ' + raw : raw;
                 const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need);
+                const owner = mvViewOwner(id, views, currentViewId);
                 if (matched) out.push({
                     id,
                     title,
-                    depth: shown
+                    depth: shown,
+                    owner: owner === null ? null : owner.name
                 });
                 for (const childId of children.get(id) ?? [])append(childId, Math.min(shown + 1, 3));
             };
@@ -1383,9 +1477,9 @@ function mvPickableRows(query) {
     }
 }
 function MvPanePicker(props) {
-    const { onPick } = props;
+    const { onPick, views, currentViewId } = props;
     const [query, setQuery] = React.useState('');
-    const rows = mvPickableRows(query);
+    const rows = mvPickableRows(query, views ?? [], currentViewId ?? null);
     return h('div', {
         className: 'mv-picker',
         'data-mv-picker': ''
@@ -1414,12 +1508,18 @@ function MvPanePicker(props) {
             type: 'button',
             className: 'mv-picker-item',
             'data-depth': String(row.depth ?? 0),
+            'data-owned': row.owner === null || row.owner === undefined ? undefined : 'true',
+            disabled: row.owner !== null && row.owner !== undefined,
             style: row.depth === 0 ? undefined : {
                 paddingLeft: String(8 + row.depth * 14) + 'px'
             },
-            title: row.title,
+            title: row.owner === null || row.owner === undefined ? row.title : row.title + ' · ' + T('views') + ': ' + row.owner,
             onClick: ()=>onPick(row.id)
-        }, row.title))));
+        }, h('span', {
+            className: 'mv-picker-title'
+        }, row.title), row.owner === null || row.owner === undefined ? null : h('span', {
+            className: 'mv-picker-owner'
+        }, row.owner)))));
 }
 function mvOpenFileInNative(sessionId, label) {
     try {
@@ -1463,16 +1563,22 @@ function MvDivider(props) {
         setDragging(true);
         const dir = node.dir;
         const splitId = node.id;
+        const divider = ref.current;
+        const first = divider === null ? null : divider.previousElementSibling;
+        const second = divider === null ? null : divider.nextElementSibling;
+        let latest = node.ratio;
         const move = (moveEvent)=>{
-            const ratio = ratioAt(dir, moveEvent);
-            lastRatio.current = ratio;
-            onResize(splitId, ratio);
+            latest = mvClampRatio(ratioAt(dir, moveEvent));
+            lastRatio.current = latest;
+            if (first !== null) first.style.flexGrow = String(latest);
+            if (second !== null) second.style.flexGrow = String(1 - latest);
         };
         const stop = ()=>{
             window.removeEventListener('pointermove', move);
             window.removeEventListener('pointerup', stop);
             window.removeEventListener('pointercancel', stop);
             setDragging(false);
+            if (latest !== node.ratio) onResize(splitId, latest);
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', stop);
@@ -1557,13 +1663,22 @@ function PaneFrame(props) {
     }))), h('div', {
         className: 'mv-pane-body'
     }, sessionId === null ? h(MvPanePicker, {
-        onPick: (id)=>surface.onBind(leaf.id, id)
-    }) : h(PaneHost, {
+        onPick: (id)=>surface.onBind(leaf.id, id),
+        views: surface.state.views,
+        currentViewId: surface.state.currentViewId
+    }) : h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,
         renderSlot: surface.renderSlot
     })));
 }
+const MvPaneHost = React.memo(function MvPaneHost(props) {
+    return h(PaneHost, {
+        sessionId: props.sessionId,
+        SessionProvider: props.SessionProvider,
+        renderSlot: props.renderSlot
+    });
+}, (previous, next)=>previous.sessionId === next.sessionId && previous.SessionProvider === next.SessionProvider && previous.renderSlot === next.renderSlot);
 function renderMvNode(node, surface) {
     if (node.kind === 'leaf') return h(PaneFrame, {
         key: node.id,
@@ -1750,8 +1865,19 @@ function MultiviewStage(props) {
         startY: 0,
         active: false
     });
+    const openedRef = React.useRef(false);
     React.useEffect(()=>{
         mvReconcile();
+        if (openedRef.current) return;
+        try {
+            const snapshot = PTX.sessions.list.getSnapshot();
+            if (snapshot.phase !== 'ready') return;
+            const current = snapshot.ids.find((id)=>(snapshot.byId[id]?.retainedBy?.mainView ?? 0) > 0);
+            openedRef.current = true;
+            if (typeof current === 'string') mvOpenForSession(current);
+        } catch (error) {
+            openedRef.current = true;
+        }
     }, [
         list
     ]);
@@ -2105,7 +2231,11 @@ function apply(ctx) {
             paneEntries: ()=>(PTX.slots.entries(MV_PANE_SLOT) || []).length,
             open: ()=>PTX.layout.selectPanel(MV_PANEL_ID),
             close: ()=>PTX.layout.selectPanel(null),
-            workspaces: ()=>PTX.workspaces.list.getSnapshot()
+            workspaces: ()=>PTX.workspaces.list.getSnapshot(),
+            openFor: (sessionId)=>mvOpenForSession(sessionId),
+            startView: ()=>mvStartView(),
+            applyView: (viewId)=>mvApplyView(viewId),
+            deleteView: (viewId)=>mvDeleteView(viewId)
         };
     }
 }

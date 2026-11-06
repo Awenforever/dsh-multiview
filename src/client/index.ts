@@ -181,6 +181,10 @@ function apply(ctx) {
       open: () => PTX.layout.selectPanel(MV_PANEL_ID),
       close: () => PTX.layout.selectPanel(null),
       workspaces: () => PTX.workspaces.list.getSnapshot(),
+      openFor: (sessionId) => mvOpenForSession(sessionId),
+      startView: () => mvStartView(),
+      applyView: (viewId) => mvApplyView(viewId),
+      deleteView: (viewId) => mvDeleteView(viewId),
     }
   }
 }

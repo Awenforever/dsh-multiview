@@ -48,7 +48,7 @@ function mvDotLabel(state: string): string {
  * @param query - free text matched against title and id.
  * @returns rows with a `depth` for the picker's indent.
  */
-function mvPickableRows(query: string): any[] {
+function mvPickableRows(query: string, views: any[] = [], currentViewId: string | null = null): any[] {
   const need = query.trim().toLowerCase()
   try {
     const list = PTX.sessions.list.getSnapshot()
@@ -117,7 +117,8 @@ function mvPickableRows(query: string): any[] {
         const shown = orphan.has(id) ? Math.max(depth, 1) : depth
         const title = shown > 0 ? '↳ ' + raw : raw
         const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need)
-        if (matched) out.push({ id, title, depth: shown })
+        const owner = mvViewOwner(id, views, currentViewId)
+      if (matched) out.push({ id, title, depth: shown, owner: owner === null ? null : owner.name })
         for (const childId of children.get(id) ?? []) append(childId, Math.min(shown + 1, 3))
       }
       for (const id of roots) append(id, 0)
@@ -133,9 +134,9 @@ function mvPickableRows(query: string): any[] {
 
 /** Empty-pane session picker: filter field plus the most recent sessions. */
 function MvPanePicker(props) {
-  const { onPick } = props
+  const { onPick, views, currentViewId } = props
   const [query, setQuery] = React.useState('')
-  const rows = mvPickableRows(query)
+  const rows = mvPickableRows(query, views ?? [], currentViewId ?? null)
   return h(
     'div',
     { className: 'mv-picker', 'data-mv-picker': '' },
@@ -167,11 +168,19 @@ function MvPanePicker(props) {
                     type: 'button',
                     className: 'mv-picker-item',
                     'data-depth': String(row.depth ?? 0),
+                    'data-owned': row.owner === null || row.owner === undefined ? undefined : 'true',
+                    disabled: row.owner !== null && row.owner !== undefined,
                     style: row.depth === 0 ? undefined : { paddingLeft: String(8 + row.depth * 14) + 'px' },
-                    title: row.title,
+                    title:
+                      row.owner === null || row.owner === undefined
+                        ? row.title
+                        : row.title + ' · ' + T('views') + ': ' + row.owner,
                     onClick: () => onPick(row.id),
                   },
-                  row.title,
+                  h('span', { className: 'mv-picker-title' }, row.title),
+                  row.owner === null || row.owner === undefined
+                    ? null
+                    : h('span', { className: 'mv-picker-owner' }, row.owner),
                 ),
           ),
     ),
@@ -237,24 +246,31 @@ function MvDivider(props) {
 
   // Listeners are attached inside pointerdown, not from an effect: an effect
   // commits after paint, so the first pointermove frames of a fast drag would
-  // be dropped (observed on a real desktop window). Capturing the ratio here
-  // also keeps the handler independent of re-renders.
+  // be dropped (observed on a real desktop window). The sibling slots are moved
+  // directly while dragging and the store is updated once on release, so a drag
+  // never re-renders the transcripts.
   const beginDrag = (event: any) => {
     if (event.button !== 0) return
     event.preventDefault()
     setDragging(true)
     const dir = node.dir
     const splitId = node.id
+    const divider = ref.current
+    const first = divider === null ? null : divider.previousElementSibling
+    const second = divider === null ? null : divider.nextElementSibling
+    let latest = node.ratio
     const move = (moveEvent: PointerEvent) => {
-      const ratio = ratioAt(dir, moveEvent)
-      lastRatio.current = ratio
-      onResize(splitId, ratio)
+      latest = mvClampRatio(ratioAt(dir, moveEvent))
+      lastRatio.current = latest
+      if (first !== null) first.style.flexGrow = String(latest)
+      if (second !== null) second.style.flexGrow = String(1 - latest)
     }
     const stop = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', stop)
       window.removeEventListener('pointercancel', stop)
       setDragging(false)
+      if (latest !== node.ratio) onResize(splitId, latest)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop)
@@ -342,8 +358,8 @@ function PaneFrame(props) {
       'div',
       { className: 'mv-pane-body' },
       sessionId === null
-        ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id) })
-        : h(PaneHost, {
+        ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id), views: surface.state.views, currentViewId: surface.state.currentViewId })
+        : h(MvPaneHost, {
             sessionId,
             SessionProvider: surface.SessionProvider,
             renderSlot: surface.renderSlot,
@@ -351,6 +367,24 @@ function PaneFrame(props) {
     ),
   )
 }
+
+/**
+ * The conversation inside a pane, memoized on its identity: focus changes,
+ * dragging and other chrome updates re-render the frame, never the transcript.
+ */
+const MvPaneHost = React.memo(
+  function MvPaneHost(props) {
+    return h(PaneHost, {
+      sessionId: props.sessionId,
+      SessionProvider: props.SessionProvider,
+      renderSlot: props.renderSlot,
+    })
+  },
+  (previous, next) =>
+    previous.sessionId === next.sessionId &&
+    previous.SessionProvider === next.SessionProvider &&
+    previous.renderSlot === next.renderSlot,
+)
 
 /** Dispatch one tree node to its renderer. */
 function renderMvNode(node: any, surface: any): any {
@@ -558,8 +592,20 @@ function MultiviewStage(props) {
   const [drag, setDrag] = React.useState({ from: null, over: null })
   const dragRef = React.useRef({ from: null, over: null, startX: 0, startY: 0, active: false })
 
+  const openedRef = React.useRef(false)
+
   React.useEffect(() => {
     mvReconcile()
+    if (openedRef.current) return
+    try {
+      const snapshot = PTX.sessions.list.getSnapshot()
+      if (snapshot.phase !== 'ready') return
+      const current = snapshot.ids.find((id) => ((snapshot.byId[id]?.retainedBy?.mainView ?? 0) as number) > 0)
+      openedRef.current = true
+      if (typeof current === 'string') mvOpenForSession(current)
+    } catch (error) {
+      openedRef.current = true
+    }
   }, [list])
 
   React.useEffect(() => {

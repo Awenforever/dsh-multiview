@@ -1,12 +1,22 @@
 /**
  * The stage's single source of truth: layout tree, focus, maximized pane, saved
- * views and the persisted shape. React reads it through `useSyncExternalStore`;
- * every mutation goes through the pure helpers in `model.ts`.
+ * views, the view currently being edited, and the persisted shape. React reads
+ * it through `useSyncExternalStore`; every mutation goes through the pure
+ * helpers in `model.ts`.
  */
 
 /** Stage state persisted per device. */
 function mvInitialState(): any {
-  return { layout: mvPreset(2), focused: 'p1', maximized: null, preset: 2, seeded: false, reconciled: false, views: [] }
+  return {
+    layout: mvPreset(2),
+    focused: 'p1',
+    maximized: null,
+    preset: 2,
+    seeded: false,
+    reconciled: false,
+    views: [],
+    currentViewId: null,
+  }
 }
 
 let mvState = mvInitialState()
@@ -33,12 +43,13 @@ function mvScheduleSave(): void {
     mvSaveTimer = 0
     try {
       const durable = {
-        version: 2,
+        version: 3,
         layout: mvState.layout,
         focused: mvState.focused,
         preset: mvState.preset,
         seeded: mvState.seeded,
         views: mvState.views,
+        currentViewId: mvState.currentViewId,
       }
       window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable))
     } catch (error) {
@@ -47,7 +58,7 @@ function mvScheduleSave(): void {
   }, 200)
 }
 
-/** Ordered Session ids that a layout currently shows; the identity of a view. */
+/** Ordered Session ids that a layout currently shows. */
 function mvViewKey(layout: any): string {
   return mvLeaves(layout)
     .map((leaf) => leaf.sessionId)
@@ -70,22 +81,53 @@ function mvViewName(layout: any): string {
   return titles.join('  |  ')
 }
 
-/**
- * Remember the current split whenever it shows two or more Sessions.
- * @param layout - the layout to capture.
- * @param views - the current view list.
- * @returns the view list, or null when nothing should change.
- */
-function mvCaptureView(layout: any, views: any[]): any[] | null {
+/** Whether a layout has enough Sessions to be worth remembering. */
+function mvViewWorthy(layout: any): boolean {
   const key = mvViewKey(layout)
-  if (key === '' || key.indexOf(',') < 0) return null
+  return key !== '' && key.indexOf(',') >= 0
+}
+
+/**
+ * Keep the edited view in step with the stage, without spawning views blindly:
+ * a stage that already belongs to a view edits that view in place, and only a
+ * combination nobody has saved yet becomes a new one.
+ * @param next - the state about to be committed.
+ * @returns the state with an updated view list and current view id.
+ */
+function mvSyncView(next: any): any {
+  const views = next.views ?? []
+  const worthy = mvViewWorthy(next.layout)
+  const current = views.find((view) => view.id === next.currentViewId) ?? null
+  if (!worthy) {
+    if (current === null) return next
+    /* The split no longer holds two Sessions: drop the view it belonged to. */
+    return {
+      ...next,
+      views: views.filter((view) => view.id !== current.id),
+      currentViewId: null,
+    }
+  }
+  if (current !== null) {
+    return {
+      ...next,
+      views: views.map((view) =>
+        view.id === current.id ? { ...view, layout: next.layout, name: mvViewName(next.layout) } : view,
+      ),
+    }
+  }
+  const key = mvViewKey(next.layout)
   const existing = views.find((view) => view.id === key)
   if (existing !== undefined) {
-    if (existing.layout === layout) return null
-    return views.map((view) => (view.id === key ? { ...view, layout } : view))
+    return {
+      ...next,
+      currentViewId: existing.id,
+      views: views.map((view) =>
+        view.id === existing.id ? { ...view, layout: next.layout, name: mvViewName(next.layout) } : view,
+      ),
+    }
   }
-  const next = [{ id: key, name: mvViewName(layout), layout, savedAt: Date.now() }, ...views]
-  return next.slice(0, 12)
+  const created = { id: key, name: mvViewName(next.layout), layout: next.layout, savedAt: Date.now() }
+  return { ...next, currentViewId: created.id, views: [created, ...views].slice(0, 12) }
 }
 
 /**
@@ -95,10 +137,7 @@ function mvCaptureView(layout: any, views: any[]): any[] | null {
 function mvCommit(produce: (current: any) => any): void {
   const produced = produce(mvState)
   if (produced === mvState || produced === null || produced === undefined) return
-  let next = produced
-  const captured = mvCaptureView(next.layout, next.views ?? [])
-  if (captured !== null) next = { ...next, views: captured }
-  mvState = next
+  mvState = mvSyncView(produced)
   mvScheduleSave()
   for (const listener of mvListeners) {
     try {
@@ -113,11 +152,9 @@ function mvCommit(produce: (current: any) => any): void {
 function mvSanitizeView(raw: any): any {
   if (raw === null || typeof raw !== 'object') return null
   const layout = mvSanitize(raw.layout)
-  if (layout === null) return null
-  const key = mvViewKey(layout)
-  if (key === '' || key.indexOf(',') < 0) return null
+  if (layout === null || !mvViewWorthy(layout)) return null
   return {
-    id: key,
+    id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : mvViewKey(layout),
     name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'),
     layout,
     savedAt: typeof raw.savedAt === 'number' ? raw.savedAt : Date.now(),
@@ -133,12 +170,16 @@ function mvHydrate(): void {
     raw = null
   }
   if (raw === null || typeof raw !== 'object') return
-  if (raw.version !== 1 && raw.version !== 2) return
+  if (raw.version !== 1 && raw.version !== 2 && raw.version !== 3) return
   const layout = mvSanitize(raw.layout)
   if (layout === null) return
   const leaves = mvLeaves(layout)
   const focused = leaves.some((leaf) => leaf.id === raw.focused) ? raw.focused : leaves[0].id
   const views = Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view) => view !== null) : []
+  const currentViewId =
+    typeof raw.currentViewId === 'string' && views.some((view) => view.id === raw.currentViewId)
+      ? raw.currentViewId
+      : null
   mvState = {
     layout,
     focused,
@@ -147,13 +188,14 @@ function mvHydrate(): void {
     seeded: raw.seeded === true,
     reconciled: false,
     views,
+    currentViewId,
   }
 }
 
-/** Forget the saved stage and start from the two-pane preset. */
+/** Forget the saved stage and start from the two-pane preset, keeping the views. */
 function mvReset(): void {
   const views = mvState.views
-  mvCommit(() => ({ ...mvInitialState(), views }))
+  mvCommit(() => ({ ...mvInitialState(), views, currentViewId: null }))
   try {
     window.localStorage.removeItem(MV_STORAGE_KEY)
   } catch (error) {
@@ -182,6 +224,39 @@ function mvReconcile(): void {
   } catch (error) {
     mvCommit((current) => ({ ...current, reconciled: true }))
   }
+}
+
+/**
+ * Open the split for one Session: reuse the view that already holds it, or
+ * start a fresh two-pane view for it. This is what keeps "click 分屏 from a
+ * conversation" from hijacking an unrelated saved split.
+ * @param sessionId - the conversation the user is in, if known.
+ */
+function mvOpenForSession(sessionId: string | null): void {
+  if (sessionId === null) return
+  mvCommit((current) => {
+    const owners = current.views.filter((view) => mvViewKey(view.layout).split(',').includes(sessionId))
+    const owner = owners[0]
+    if (owner !== undefined) {
+      if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) return current
+      return { ...current, layout: owner.layout, currentViewId: owner.id, maximized: null, preset: mvLeaves(owner.layout).length }
+    }
+    if (mvViewKey(current.layout).split(',').includes(sessionId)) {
+      /* Already on stage in the ad-hoc split: keep it, but remember it. */
+      return current.currentViewId === null ? { ...current, currentViewId: null } : current
+    }
+    const layout = mvWithSession(mvPreset(2), 'p1', sessionId)
+    return { ...current, layout, currentViewId: null, focused: 'p1', preset: 2, maximized: null }
+  })
+}
+
+/** Which saved view (other than the current one) already holds a Session. */
+function mvViewOwner(sessionId: string, views: any[], currentViewId: string | null): any | null {
+  for (const view of views) {
+    if (view.id === currentViewId) continue
+    if (mvViewKey(view.layout).split(',').includes(sessionId)) return view
+  }
+  return null
 }
 
 /** Switch to a preset pane count, carrying bound Sessions in reading order. */
@@ -240,8 +315,7 @@ function mvSwapLeaves(aId: string, bId: string): void {
 
 /**
  * Close one pane: a bound pane goes back to the picker (the split keeps its
- * shape), an already empty pane is removed from the tree. This is what keeps a
- * two-pane split from silently collapsing into one full-width conversation.
+ * shape), an already empty pane is removed from the tree.
  */
 function mvRemovePane(leafId: string): void {
   mvCommit((current) => {
@@ -257,7 +331,13 @@ function mvRemovePane(leafId: string): void {
     if (layout === null) return current
     const nextLeaves = mvLeaves(layout)
     const focused = nextLeaves.some((item) => item.id === current.focused) ? current.focused : nextLeaves[0].id
-    return { ...current, layout, focused, preset: nextLeaves.length, maximized: current.maximized === leafId ? null : current.maximized }
+    return {
+      ...current,
+      layout,
+      focused,
+      preset: nextLeaves.length,
+      maximized: current.maximized === leafId ? null : current.maximized,
+    }
   })
 }
 
@@ -273,15 +353,31 @@ function mvApplyView(viewId: string): void {
       focused: leaves[0].id,
       preset: leaves.length,
       maximized: null,
+      currentViewId: view.id,
     }
   })
 }
 
+/** Start an empty split: the next combination becomes its own view. */
+function mvStartView(): void {
+  mvCommit((current) => ({
+    ...current,
+    layout: mvPreset(2),
+    focused: 'p1',
+    preset: 2,
+    maximized: null,
+    currentViewId: null,
+  }))
+}
+
 /** Forget one saved split. */
 function mvDeleteView(viewId: string): void {
-  mvCommit((current) =>
-    current.views.some((item) => item.id === viewId)
-      ? { ...current, views: current.views.filter((item) => item.id !== viewId) }
-      : current,
-  )
+  mvCommit((current) => {
+    if (!current.views.some((item) => item.id === viewId)) return current
+    return {
+      ...current,
+      views: current.views.filter((item) => item.id !== viewId),
+      currentViewId: current.currentViewId === viewId ? null : current.currentViewId,
+    }
+  })
 }
