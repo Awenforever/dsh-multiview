@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.4';
+const MV_PLUGIN_VERSION = '0.1.5';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1043,7 +1043,9 @@ const MV_CSS = `
 .mv-picker-empty{padding:12px 8px;font-size:13px;color:var(--dsw-alias-label-tertiary)}
 .mv-picker-group{padding:10px 8px 4px;font-size:11px;font-weight:600;letter-spacing:0.02em;color:var(--dsw-alias-label-tertiary);text-transform:none}
 .mv-views{position:relative;display:inline-flex}
-.mv-views-count{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
+.mv-views-toggle{position:relative}
+.mv-views-toggle[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.mv-views-count{position:absolute;top:1px;right:1px;min-width:11px;padding:0 3px;border-radius:999px;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-bg-base);font-size:9px;line-height:11px;text-align:center}
 .mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base)}
 .mv-views-empty{padding:10px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
 .mv-views-row{display:flex;align-items:center;gap:4px;border-radius:6px}
@@ -1106,7 +1108,8 @@ const MV_ICON = {
     restore: 'M6 6H3v3M10 10h3V7M10 6V3h3M6 10H3V7',
     close: 'M4 4l8 8M12 4l-8 8',
     external: 'M6 10L13 3M9 3h4v4',
-    refresh: 'M13 8a5 5 0 1 1-1.7-3.8M13 2.6v3h-3'
+    refresh: 'M13 8a5 5 0 1 1-1.7-3.8M13 2.6v3h-3',
+    views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8'
 };
 
 function mvPhase(session, conversation, summaryBlank) {
@@ -1418,6 +1421,26 @@ function MvPanePicker(props) {
             onClick: ()=>onPick(row.id)
         }, row.title))));
 }
+function mvOpenFileInNative(sessionId, label) {
+    try {
+        PTX.uiWorkspace.openSession(sessionId);
+    } catch (error) {
+        console.error('dsh-multiview: switching to the native view failed', error);
+        return;
+    }
+    const attempt = (remaining)=>{
+        if (remaining <= 0) return;
+        const chips = document.querySelectorAll('button[class*="fileLink"], a[class*="fileLink"]');
+        for (const chip of chips){
+            if (chip.closest('[data-multiview]') !== null) continue;
+            if ((chip.textContent ?? '').trim() !== label) continue;
+            chip.click();
+            return;
+        }
+        setTimeout(()=>attempt(remaining - 1), 120);
+    };
+    setTimeout(()=>attempt(14), 140);
+}
 function MvDivider(props) {
     const { node, onResize } = props;
     const [dragging, setDragging] = React.useState(false);
@@ -1672,11 +1695,13 @@ function MvViewsButton(props) {
         className: 'mv-views'
     }, h('button', {
         type: 'button',
-        className: 'mv-chip mv-views-toggle',
+        className: 'mv-icon mv-views-toggle',
         'data-active': open ? 'true' : 'false',
+        'data-count': views.length > 0 ? String(views.length) : undefined,
         title: T('views'),
+        'aria-label': T('views'),
         onClick: ()=>setOpen((value)=>!value)
-    }, T('views'), views.length > 0 ? h('span', {
+    }, MvGlyph(MV_ICON.views), views.length > 0 ? h('span', {
         className: 'mv-views-count'
     }, String(views.length)) : null), open ? h('div', {
         className: 'mv-views-pop',
@@ -1733,6 +1758,26 @@ function MultiviewStage(props) {
     React.useEffect(()=>{
         mvUpdateHydrate();
         mvUpdateMaybeAutoCheck();
+    }, []);
+    React.useEffect(()=>{
+        const element = rootRef.current;
+        if (element === null) return undefined;
+        const onClick = (event)=>{
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            const chip = target.closest('button[class*="fileLink"], a[class*="fileLink"]');
+            if (chip === null) return;
+            const pane = chip.closest('[data-pane]');
+            const leafId = pane === null ? null : pane.getAttribute('data-pane-id');
+            const leaf = leafId === null ? null : mvLeafById(mvGetState().layout, leafId);
+            const sessionId = leaf === null ? null : leaf.sessionId;
+            if (sessionId === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            mvOpenFileInNative(sessionId, (chip.textContent ?? '').trim());
+        };
+        element.addEventListener('click', onClick, true);
+        return ()=>element.removeEventListener('click', onClick, true);
     }, []);
     React.useEffect(()=>{
         const element = rootRef.current;
@@ -1886,11 +1931,11 @@ function MultiviewStage(props) {
     }, T('restore')), h(MvViewsButton, {
         views: state.views ?? [],
         currentKey: mvViewKey(state.layout)
-    }), h('span', {
+    }), h(MvUpdateButton, null), h('span', {
         className: 'mv-bar-spacer'
     }), h('div', {
         className: 'mv-strip'
-    }, chips), h(MvUpdateButton, null)), h(MvStageBoundary, null, body));
+    }, chips)), h(MvStageBoundary, null, body));
 }
 
 const MV_INJECT = [

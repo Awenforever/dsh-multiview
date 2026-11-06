@@ -178,6 +178,38 @@ function MvPanePicker(props) {
   )
 }
 
+/**
+ * Open a file chip from a pane in the session's native view.
+ *
+ * File previews go through the right sidebar, which ships no session surface
+ * while any main panel is active — clicking a file inside a pane would raise
+ * "sidebarRight: no session surface is mounted" and dead-end in a dialog.
+ * Instead: leave the split for that Session, then click the same chip in the
+ * native conversation once it has rendered.
+ * @param sessionId - the pane's Session.
+ * @param label - the chip's visible path, used to find it again.
+ */
+function mvOpenFileInNative(sessionId: string, label: string): void {
+  try {
+    PTX.uiWorkspace.openSession(sessionId)
+  } catch (error) {
+    console.error('dsh-multiview: switching to the native view failed', error)
+    return
+  }
+  const attempt = (remaining: number): void => {
+    if (remaining <= 0) return
+    const chips = document.querySelectorAll('button[class*="fileLink"], a[class*="fileLink"]')
+    for (const chip of chips) {
+      if (chip.closest('[data-multiview]') !== null) continue
+      if ((chip.textContent ?? '').trim() !== label) continue
+      ;(chip as HTMLElement).click()
+      return
+    }
+    setTimeout(() => attempt(remaining - 1), 120)
+  }
+  setTimeout(() => attempt(14), 140)
+}
+
 /** One draggable split boundary. */
 function MvDivider(props) {
   const { node, onResize } = props
@@ -461,12 +493,14 @@ function MvViewsButton(props) {
       'button',
       {
         type: 'button',
-        className: 'mv-chip mv-views-toggle',
+        className: 'mv-icon mv-views-toggle',
         'data-active': open ? 'true' : 'false',
+        'data-count': views.length > 0 ? String(views.length) : undefined,
         title: T('views'),
+        'aria-label': T('views'),
         onClick: () => setOpen((value) => !value),
       },
-      T('views'),
+      MvGlyph(MV_ICON.views),
       views.length > 0 ? h('span', { className: 'mv-views-count' }, String(views.length)) : null,
     ),
     open
@@ -531,6 +565,27 @@ function MultiviewStage(props) {
   React.useEffect(() => {
     mvUpdateHydrate()
     mvUpdateMaybeAutoCheck()
+  }, [])
+
+  React.useEffect(() => {
+    const element = rootRef.current
+    if (element === null) return undefined
+    const onClick = (event: any): void => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const chip = target.closest('button[class*="fileLink"], a[class*="fileLink"]')
+      if (chip === null) return
+      const pane = chip.closest('[data-pane]')
+      const leafId = pane === null ? null : pane.getAttribute('data-pane-id')
+      const leaf = leafId === null ? null : mvLeafById(mvGetState().layout, leafId)
+      const sessionId = leaf === null ? null : leaf.sessionId
+      if (sessionId === null) return
+      event.preventDefault()
+      event.stopPropagation()
+      mvOpenFileInNative(sessionId, (chip.textContent ?? '').trim())
+    }
+    element.addEventListener('click', onClick, true)
+    return () => element.removeEventListener('click', onClick, true)
   }, [])
 
   React.useEffect(() => {
@@ -667,9 +722,9 @@ function MultiviewStage(props) {
         ? null
         : h('button', { type: 'button', className: 'mv-chip', 'data-active': 'true', onClick: mvRestore }, T('restore')),
       h(MvViewsButton, { views: state.views ?? [], currentKey: mvViewKey(state.layout) }),
+      h(MvUpdateButton, null),
       h('span', { className: 'mv-bar-spacer' }),
       h('div', { className: 'mv-strip' }, chips),
-      h(MvUpdateButton, null),
     ),
     h(MvStageBoundary, null, body),
   )
