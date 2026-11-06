@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Enables npm trusted publishing (OIDC) and provenance once configured.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 

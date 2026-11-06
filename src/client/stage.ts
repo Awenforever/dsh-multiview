@@ -13,11 +13,13 @@ function useMvState(): any {
 
 /** Sidebar panel-list icon; inherits `currentColor` from the rail. */
 function MultiviewPanelIcon() {
+  /* 16×16 with the shipped rows' own stroke weight, so the glyph sits on the
+     same optical grid as 插件 / 自动化任务 / 更多 instead of nudging the label. */
   return h(
     'svg',
-    { viewBox: '0 0 20 20', width: 20, height: 20, 'aria-hidden': true, fill: 'none' },
-    h('rect', { x: 2.5, y: 3.5, width: 15, height: 13, rx: 3, stroke: 'currentColor', strokeWidth: 1.4 }),
-    h('path', { d: 'M10 3.5v13', stroke: 'currentColor', strokeWidth: 1.2 }),
+    { viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': true, fill: 'none' },
+    h('rect', { x: 1.75, y: 2.75, width: 12.5, height: 10.5, rx: 2.5, stroke: 'currentColor', strokeWidth: 1.4 }),
+    h('path', { d: 'M8 2.75v10.5', stroke: 'currentColor', strokeWidth: 1.2 }),
   )
 }
 

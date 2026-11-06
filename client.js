@@ -1250,21 +1250,21 @@ function useMvState() {
 }
 function MultiviewPanelIcon() {
     return h('svg', {
-        viewBox: '0 0 20 20',
-        width: 20,
-        height: 20,
+        viewBox: '0 0 16 16',
+        width: 16,
+        height: 16,
         'aria-hidden': true,
         fill: 'none'
     }, h('rect', {
-        x: 2.5,
-        y: 3.5,
-        width: 15,
-        height: 13,
-        rx: 3,
+        x: 1.75,
+        y: 2.75,
+        width: 12.5,
+        height: 10.5,
+        rx: 2.5,
         stroke: 'currentColor',
         strokeWidth: 1.4
     }), h('path', {
-        d: 'M10 3.5v13',
+        d: 'M8 2.75v10.5',
         stroke: 'currentColor',
         strokeWidth: 1.2
     }));
