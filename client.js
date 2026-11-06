@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.2';
+const MV_PLUGIN_VERSION = '0.1.3';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1038,6 +1038,8 @@ const MV_CSS = `
 .mv-picker-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
 .mv-picker-item{display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-size:13px;line-height:18px}
 .mv-picker-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-picker-item[data-depth="1"]{color:var(--dsw-alias-label-secondary);font-size:12px}
+.mv-picker-item[data-depth="1"]:hover{color:var(--dsw-alias-label-primary)}
 .mv-picker-empty{padding:12px 8px;font-size:13px;color:var(--dsw-alias-label-tertiary)}
 .mv-views{position:relative;display:inline-flex}
 .mv-views-count{margin-left:6px;padding:0 5px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
@@ -1283,20 +1285,57 @@ function mvPickableRows(query) {
     const need = query.trim().toLowerCase();
     try {
         const list = PTX.sessions.list.getSnapshot();
-        const rows = [];
+        const rows = new Map();
         for (const id of list.ids){
             const row = list.byId[id];
             if (row === undefined || row.blank === true) continue;
             if (mvIsArchived(id)) continue;
-            const title = row.title === undefined || row.title === '' ? id : row.title;
-            if (need !== '' && !title.toLowerCase().includes(need) && !id.toLowerCase().includes(need)) continue;
-            rows.push({
-                id,
-                title
-            });
-            if (rows.length >= 120) break;
+            rows.set(id, row);
         }
-        return rows;
+        const rank = (id)=>{
+            const value = rows.get(id)?.updatedAt;
+            return typeof value === 'number' ? value : 0;
+        };
+        const children = new Map();
+        const roots = [];
+        const orphan = new Set();
+        for (const id of rows.keys()){
+            const parentId = rows.get(id)?.parentId;
+            if (typeof parentId !== 'string' || parentId === id) {
+                roots.push(id);
+                continue;
+            }
+            if (rows.has(parentId)) {
+                const bucket = children.get(parentId);
+                if (bucket === undefined) children.set(parentId, [
+                    id
+                ]);
+                else bucket.push(id);
+            } else {
+                orphan.add(id);
+                roots.push(id);
+            }
+        }
+        const byRank = (left, right)=>rank(right) - rank(left);
+        roots.sort(byRank);
+        for (const bucket of children.values())bucket.sort(byRank);
+        const out = [];
+        const append = (id, depth)=>{
+            const row = rows.get(id);
+            if (row === undefined) return;
+            const raw = row.title === undefined || row.title === '' ? id : row.title;
+            const shown = orphan.has(id) ? Math.max(depth, 1) : depth;
+            const title = shown > 0 ? '↳ ' + raw : raw;
+            const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need);
+            if (matched) out.push({
+                id,
+                title,
+                depth: shown
+            });
+            for (const childId of children.get(id) ?? [])append(childId, Math.min(shown + 1, 3));
+        };
+        for (const id of roots)append(id, 0);
+        return out.slice(0, 200);
     } catch (error) {
         return [];
     }
@@ -1328,6 +1367,10 @@ function MvPanePicker(props) {
             key: row.id,
             type: 'button',
             className: 'mv-picker-item',
+            'data-depth': String(row.depth ?? 0),
+            style: row.depth === 0 ? undefined : {
+                paddingLeft: String(8 + row.depth * 14) + 'px'
+            },
             title: row.title,
             onClick: ()=>onPick(row.id)
         }, row.title))));

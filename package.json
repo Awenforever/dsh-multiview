@@ -1,6 +1,6 @@
 {
   "name": "dsh-multiview",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Multi-view for DeepSeek Harness: 2-4 live conversations side by side, each pane a real Chat, with resize, swap and pane focus.",
