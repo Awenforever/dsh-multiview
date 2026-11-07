@@ -98,10 +98,6 @@ const MV_CSS = `
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 
 .mv-live-hidden{display:none}
-.mv-parked{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer}
-.mv-parked:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.mv-parked-title{font-size:13px;color:var(--dsw-alias-label-secondary)}
-.mv-parked-note{font-size:11px;color:var(--dsw-alias-label-tertiary)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
 `
 

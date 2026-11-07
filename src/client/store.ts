@@ -16,7 +16,6 @@ function mvInitialState(): any {
     reconciled: false,
     views: [],
     currentViewId: null,
-    frozen: [],
   }
 }
 
@@ -51,7 +50,6 @@ function mvScheduleSave(): void {
         seeded: mvState.seeded,
         views: mvState.views,
         currentViewId: mvState.currentViewId,
-        frozen: mvState.frozen ?? [],
       }
       window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable))
     } catch (error) {
@@ -191,7 +189,6 @@ function mvHydrate(): void {
     reconciled: false,
     views,
     currentViewId,
-    frozen: Array.isArray(raw.frozen) ? raw.frozen.filter((id) => typeof id === 'string') : [],
   }
 }
 
@@ -382,14 +379,5 @@ function mvDeleteView(viewId: string): void {
       views: current.views.filter((item) => item.id !== viewId),
       currentViewId: current.currentViewId === viewId ? null : current.currentViewId,
     }
-  })
-}
-
-/** Freeze or resume one pane's live rendering; only the user changes this. */
-function mvToggleFreeze(leafId: string): void {
-  mvCommit((current) => {
-    const frozen = current.frozen ?? []
-    const next = frozen.includes(leafId) ? frozen.filter((id) => id !== leafId) : [...frozen, leafId]
-    return { ...current, frozen: next }
   })
 }

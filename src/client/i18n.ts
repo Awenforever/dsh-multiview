@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.14'
+const MV_PLUGIN_VERSION = '0.1.15'
 
 const MV_ZH = {
   panel: '分屏',
@@ -34,10 +34,6 @@ const MV_ZH = {
   waiting: '等待你处理',
   unread: '有新结果',
   views: '视图',
-  freezePane: '冻结这一格（停止实时渲染）',
-  resumePane: '恢复实时渲染',
-  parkedTitle: '已冻结 —— 点此恢复实时渲染',
-  parkedHint: '这一格已被你手动冻结；点击恢复实时渲染',
   viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
   viewsCurrent: '当前分屏',
   viewsDelete: '删除视图',
@@ -84,10 +80,6 @@ const MV_EN = {
   waiting: 'Waiting for you',
   unread: 'New result',
   views: 'Views',
-  freezePane: 'Freeze this pane (stop live rendering)',
-  resumePane: 'Resume live rendering',
-  parkedTitle: 'Frozen — click to resume live rendering',
-  parkedHint: 'You froze this pane; click to resume live rendering',
   viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
   viewsCurrent: 'Current split',
   viewsDelete: 'Delete view',

@@ -310,7 +310,6 @@ function PaneFrame(props) {
   const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty')
   const status = sessionId === null ? undefined : surface.statuses.get(sessionId)
   const dot = mvDotState(status)
-  const frozen = (state.frozen ?? []).includes(leaf.id)
   const maximized = state.maximized === leaf.id
 
   return h(
@@ -352,11 +351,6 @@ function PaneFrame(props) {
         'div',
         { className: 'mv-head-actions' },
         h(MvIconButton, {
-          label: frozen ? T('resumePane') : T('freezePane'),
-          path: frozen ? MV_ICON.play : MV_ICON.pause,
-          onClick: () => surface.onToggleFreeze(leaf.id),
-        }),
-        h(MvIconButton, {
           label: maximized ? T('restore') : T('maximize'),
           path: maximized ? MV_ICON.restore : MV_ICON.maximize,
           onClick: () => surface.onMaximize(leaf.id),
@@ -376,9 +370,7 @@ function PaneFrame(props) {
       { className: 'mv-pane-body' },
       sessionId === null
         ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id), views: surface.state.views, currentViewId: surface.state.currentViewId })
-        : frozen
-          ? h(MvParkedPane, { title, onResume: () => surface.onToggleFreeze(leaf.id), paused: true })
-          : h(MvPaneHost, {
+        : h(MvPaneHost, {
               sessionId,
               SessionProvider: surface.SessionProvider,
               renderSlot: surface.renderSlot,
@@ -408,23 +400,6 @@ const MvPaneHost = React.memo(
     previous.useSessions === next.useSessions,
 )
 
-/** Placeholder for a pane parked by performance mode: no transcript, no live work. */
-function MvParkedPane(props) {
-  const { title, onResume } = props
-
-  /* The light level hides a still-mounted transcript; the smart level also rotates one in. */
-  return h(
-    'button',
-    {
-      type: 'button',
-      className: 'mv-parked',
-      onClick: onResume,
-      title: T('parkedHint'),
-    },
-    h('span', { className: 'mv-parked-title' }, title),
-    h('span', { className: 'mv-parked-note' }, T('parkedTitle')),
-  )
-}
 
 /** Dispatch one tree node to its renderer. */
 function renderMvNode(node: any, surface: any): any {
@@ -716,7 +691,6 @@ function MultiviewStage(props) {
 
   const surface = {
     useSessions,
-    onToggleFreeze: mvToggleFreeze,
     state,
     statuses,
     SessionProvider,

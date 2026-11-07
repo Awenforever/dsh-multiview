@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.14';
+const MV_PLUGIN_VERSION = '0.1.15';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -34,10 +34,6 @@ const MV_ZH = {
     waiting: '等待你处理',
     unread: '有新结果',
     views: '视图',
-    freezePane: '冻结这一格（停止实时渲染）',
-    resumePane: '恢复实时渲染',
-    parkedTitle: '已冻结 —— 点此恢复实时渲染',
-    parkedHint: '这一格已被你手动冻结；点击恢复实时渲染',
     viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
     viewsCurrent: '当前分屏',
     viewsDelete: '删除视图',
@@ -83,10 +79,6 @@ const MV_EN = {
     waiting: 'Waiting for you',
     unread: 'New result',
     views: 'Views',
-    freezePane: 'Freeze this pane (stop live rendering)',
-    resumePane: 'Resume live rendering',
-    parkedTitle: 'Frozen — click to resume live rendering',
-    parkedHint: 'You froze this pane; click to resume live rendering',
     viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
     viewsCurrent: 'Current split',
     viewsDelete: 'Delete view',
@@ -451,8 +443,7 @@ function mvInitialState() {
         seeded: false,
         reconciled: false,
         views: [],
-        currentViewId: null,
-        frozen: []
+        currentViewId: null
     };
 }
 let mvState = mvInitialState();
@@ -479,8 +470,7 @@ function mvScheduleSave() {
                 preset: mvState.preset,
                 seeded: mvState.seeded,
                 views: mvState.views,
-                currentViewId: mvState.currentViewId,
-                frozen: mvState.frozen ?? []
+                currentViewId: mvState.currentViewId
             };
             window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable));
         } catch (error) {}
@@ -601,8 +591,7 @@ function mvHydrate() {
         seeded: raw.seeded === true,
         reconciled: false,
         views,
-        currentViewId,
-        frozen: Array.isArray(raw.frozen) ? raw.frozen.filter((id)=>typeof id === 'string') : []
+        currentViewId
     };
 }
 function mvReset() {
@@ -810,19 +799,6 @@ function mvDeleteView(viewId) {
             ...current,
             views: current.views.filter((item)=>item.id !== viewId),
             currentViewId: current.currentViewId === viewId ? null : current.currentViewId
-        };
-    });
-}
-function mvToggleFreeze(leafId) {
-    mvCommit((current)=>{
-        const frozen = current.frozen ?? [];
-        const next = frozen.includes(leafId) ? frozen.filter((id)=>id !== leafId) : [
-            ...frozen,
-            leafId
-        ];
-        return {
-            ...current,
-            frozen: next
         };
     });
 }
@@ -1184,10 +1160,6 @@ const MV_CSS = `
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 
 .mv-live-hidden{display:none}
-.mv-parked{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer}
-.mv-parked:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.mv-parked-title{font-size:13px;color:var(--dsw-alias-label-secondary)}
-.mv-parked-note{font-size:11px;color:var(--dsw-alias-label-tertiary)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
 `;
 function MvGlyph(props) {
@@ -1654,7 +1626,6 @@ function PaneFrame(props) {
     const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty');
     const status = sessionId === null ? undefined : surface.statuses.get(sessionId);
     const dot = mvDotState(status);
-    const frozen = (state.frozen ?? []).includes(leaf.id);
     const maximized = state.maximized === leaf.id;
     return h('div', {
         className: 'mv-pane',
@@ -1687,10 +1658,6 @@ function PaneFrame(props) {
     }, title), h('div', {
         className: 'mv-head-actions'
     }, h(MvIconButton, {
-        label: frozen ? T('resumePane') : T('freezePane'),
-        path: frozen ? MV_ICON.play : MV_ICON.pause,
-        onClick: ()=>surface.onToggleFreeze(leaf.id)
-    }), h(MvIconButton, {
         label: maximized ? T('restore') : T('maximize'),
         path: maximized ? MV_ICON.restore : MV_ICON.maximize,
         onClick: ()=>surface.onMaximize(leaf.id)
@@ -1708,10 +1675,6 @@ function PaneFrame(props) {
         onPick: (id)=>surface.onBind(leaf.id, id),
         views: surface.state.views,
         currentViewId: surface.state.currentViewId
-    }) : frozen ? h(MvParkedPane, {
-        title,
-        onResume: ()=>surface.onToggleFreeze(leaf.id),
-        paused: true
     }) : h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,
@@ -1727,19 +1690,6 @@ const MvPaneHost = React.memo(function MvPaneHost(props) {
         useSessions: props.useSessions
     });
 }, (previous, next)=>previous.sessionId === next.sessionId && previous.SessionProvider === next.SessionProvider && previous.renderSlot === next.renderSlot && previous.useSessions === next.useSessions);
-function MvParkedPane(props) {
-    const { title, onResume } = props;
-    return h('button', {
-        type: 'button',
-        className: 'mv-parked',
-        onClick: onResume,
-        title: T('parkedHint')
-    }, h('span', {
-        className: 'mv-parked-title'
-    }, title), h('span', {
-        className: 'mv-parked-note'
-    }, T('parkedTitle')));
-}
 function renderMvNode(node, surface) {
     if (node.kind === 'leaf') return h(PaneFrame, {
         key: node.id,
@@ -2022,7 +1972,6 @@ function MultiviewStage(props) {
     }, []);
     const surface = {
         useSessions,
-        onToggleFreeze: mvToggleFreeze,
         state,
         statuses,
         SessionProvider,
