@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 — 2026-11-07
+
+首个通过 **npm Trusted Publishing（OIDC）** 发布的版本：仓库中没有任何 npm token 或 secret，打 tag 即由 GitHub Actions 用 OIDC 换取短期凭据发布，并附带 provenance 签名。
+
+- workflow 不再使用 setup-node 的 registry-url：它会写入 _authToken=${NODE_AUTH_TOKEN}，空值会让 npm 退回 token 认证而不是走 OIDC 交换。
+- 发布命令为 npm publish --access public --provenance。
+
 ## 0.1.9 — 2026-11-07
 
 ### 基础设施
