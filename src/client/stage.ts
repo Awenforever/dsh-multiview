@@ -311,6 +311,7 @@ function PaneFrame(props) {
   const status = sessionId === null ? undefined : surface.statuses.get(sessionId)
   const dot = mvDotState(status)
   const level = typeof state.perfLevel === 'number' ? state.perfLevel : 0
+  const rotating = surface.rotationId === leaf.id
   const maximized = state.maximized === leaf.id
 
   return h(
@@ -321,8 +322,21 @@ function PaneFrame(props) {
       'data-pane': '',
       'data-focused': focused ? 'true' : 'false',
       'data-drop': dragging.over === leaf.id && dragging.from !== null && dragging.from !== leaf.id ? 'true' : 'false',
-      onPointerDownCapture: () => surface.onFocus(leaf.id),
-      onFocusCapture: () => surface.onFocus(leaf.id),
+      /* Ignore focus noise coming from a transcript this level keeps hidden: hiding a
+         focused node makes the browser move focus elsewhere, and treating that as a
+         user focus change makes the rotation and the focus chase each other. */
+      onPointerDownCapture: (event) => {
+        const target = event.target
+        if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return
+        if (surface.isRotationGrace()) return
+        surface.onFocus(leaf.id)
+      },
+      onFocusCapture: (event) => {
+        const target = event.target
+        if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return
+        if (surface.isRotationGrace()) return
+        surface.onFocus(leaf.id)
+      },
     },
     h(
       'div',
@@ -361,21 +375,38 @@ function PaneFrame(props) {
       sessionId === null
         ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id), views: surface.state.views, currentViewId: surface.state.currentViewId })
         : level === 2 && !focused
-          ? h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id) })
-          : level === 1 && !focused
-            ? h(React.Fragment, null,
-                h('div', { className: 'mv-live-hidden' }, h(MvPaneHost, {
-                  sessionId,
-                  SessionProvider: surface.SessionProvider,
-                  renderSlot: surface.renderSlot,
-                })),
-                h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id) }),
-              )
-            : h(MvPaneHost, {
-            sessionId,
-            SessionProvider: surface.SessionProvider,
-            renderSlot: surface.renderSlot,
-          }),
+          ? h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id), rotating: false })
+          : level === 0 || focused
+            ? h(MvPaneHost, {
+                sessionId,
+                SessionProvider: surface.SessionProvider,
+                renderSlot: surface.renderSlot,
+                useSessions: surface.useSessions,
+              })
+            : h(
+                /*
+                 * Levels 1 and 3 keep one identical tree while a pane moves between
+                 * "lit" and "dimmed": only a CSS attribute flips, so rotation never
+                 * re-mounts a conversation (re-mounting costs a retain + full render).
+                 */
+                'div',
+                { className: 'mv-pane-stage' },
+                h(
+                  'div',
+                  { className: 'mv-live-frame', 'data-lit': level === 3 && rotating ? 'true' : 'false' },
+                  h(MvPaneHost, {
+                    sessionId,
+                    SessionProvider: surface.SessionProvider,
+                    renderSlot: surface.renderSlot,
+                    useSessions: surface.useSessions,
+                  }),
+                ),
+                h(
+                  'div',
+                  { className: 'mv-parked-holder', 'data-lit': level === 3 && rotating ? 'true' : 'false' },
+                  h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id), rotating: false }),
+                ),
+              ),
     ),
   )
 }
@@ -390,17 +421,21 @@ const MvPaneHost = React.memo(
       sessionId: props.sessionId,
       SessionProvider: props.SessionProvider,
       renderSlot: props.renderSlot,
+      useSessions: props.useSessions,
     })
   },
   (previous, next) =>
     previous.sessionId === next.sessionId &&
     previous.SessionProvider === next.SessionProvider &&
-    previous.renderSlot === next.renderSlot,
+    previous.renderSlot === next.renderSlot &&
+    previous.useSessions === next.useSessions,
 )
 
 /** Placeholder for a pane parked by performance mode: no transcript, no live work. */
 function MvParkedPane(props) {
   const { title, onResume } = props
+
+  /* The light level hides a still-mounted transcript; the smart level also rotates one in. */
   return h(
     'button',
     {
@@ -544,10 +579,18 @@ function MvUpdateDialog(props) {
   )
 }
 
+/** Bound panes other than the focused one; the smart level rotates live rendering through them. */
+function leavesForRotation(state: any): string[] {
+  return mvLeaves(state.layout)
+    .filter((leaf) => leaf.sessionId !== null && leaf.id !== state.focused)
+    .map((leaf) => leaf.id)
+}
+
 /** Title for the rendering-budget button, one per level. */
 function mvPerfTitle(level: number): string {
   if (level === 1) return T('perfLevel1')
   if (level === 2) return T('perfLevel2')
+  if (level === 3) return T('perfLevel3')
   return T('perfLevel0')
 }
 
@@ -641,6 +684,8 @@ function MultiviewStage(props) {
   const state = useMvState()
   const rootRef = React.useRef(null)
   const [narrow, setNarrow] = React.useState(false)
+  const [rotationTick, setRotationTick] = React.useState(0)
+  const rotationGraceRef = React.useRef(0)
   const [drag, setDrag] = React.useState({ from: null, over: null })
   const dragRef = React.useRef({ from: null, over: null, startX: 0, startY: 0, active: false })
 
@@ -659,6 +704,18 @@ function MultiviewStage(props) {
       openedRef.current = true
     }
   }, [list])
+
+  React.useEffect(() => {
+    /* A pane that re-mounts usually focuses its composer; that is not the user
+       picking a pane, so focus reports are ignored for a moment after a rotation. */
+    rotationGraceRef.current = performance.now() + 900
+  }, [rotationTick, state.perfLevel])
+
+  React.useEffect(() => {
+    if (state.perfLevel !== 3) return undefined
+    const timer = setInterval(() => setRotationTick((value) => value + 1), 4000)
+    return () => clearInterval(timer)
+  }, [state.perfLevel])
 
   React.useEffect(() => {
     mvUpdateHydrate()
@@ -726,7 +783,16 @@ function MultiviewStage(props) {
     }
   }, [])
 
+  const rotationCandidates = leavesForRotation(state)
+  const rotationId =
+    state.perfLevel === 3 && rotationCandidates.length > 0
+      ? rotationCandidates[rotationTick % rotationCandidates.length]
+      : null
+
   const surface = {
+    rotationId,
+    useSessions,
+    isRotationGrace: () => performance.now() < rotationGraceRef.current,
     state,
     statuses,
     SessionProvider,

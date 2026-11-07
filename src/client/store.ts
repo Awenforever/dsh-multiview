@@ -387,5 +387,5 @@ function mvDeleteView(viewId: string): void {
 
 /** Cycle the optional rendering budget: 0 all live, 1 light (layout skipped), 2 strong (parked). */
 function mvCyclePerfLevel(): void {
-  mvCommit((current) => ({ ...current, perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 3 }))
+  mvCommit((current) => ({ ...current, perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 4 }))
 }

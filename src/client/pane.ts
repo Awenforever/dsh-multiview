@@ -95,14 +95,14 @@ class MvPaneBoundary extends React.Component {
  * The reference is released on unmount or when the pane switches Session.
  */
 function PaneHost(props) {
-  const { sessionId, SessionProvider, renderSlot } = props
+  const { sessionId, SessionProvider, renderSlot, useSessions } = props
   const [state, setState] = React.useState({ reference: null, error: null })
+  /* Retaining before the controller list settles throws 'unknown session'; wait
+     for the list to be ready instead of showing a dead error on a cold start. */
+  const ready = useSessions === undefined ? true : useSessions((snapshot) => snapshot.phase === 'ready')
 
   React.useEffect(() => {
-    if (sessionId === null || sessionId === undefined) {
-      setState({ reference: null, error: null })
-      return undefined
-    }
+    if (sessionId === null || sessionId === undefined || ready !== true) return undefined
     let reference = null
     try {
       reference = PTX.sessions.retain(sessionId, { source: 'multiview' })
@@ -128,7 +128,7 @@ function PaneHost(props) {
         console.error('dsh-multiview: releasing a Session reference failed', error)
       }
     }
-  }, [sessionId])
+  }, [sessionId, ready])
 
   if (sessionId === null || sessionId === undefined) {
     return h(MvNote, null, T('empty'))

@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.12';
+const MV_PLUGIN_VERSION = '0.1.13';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -38,6 +38,7 @@ const MV_ZH = {
     perfLevel0: '渲染预算：全部实时（默认）',
     perfLevel1: '渲染预算：轻档 —— 非聚焦格只保留标题（跳过布局与绘制）',
     perfLevel2: '渲染预算：强档 —— 非聚焦格完全暂停渲染',
+    perfLevel3: '渲染预算：智能 —— 焦点格实时，其余轮流点亮（每 4 秒）',
     parkedTitle: '实时渲染已暂停',
     parkedHint: '性能模式下非聚焦格不渲染；点击这一格恢复',
     viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
@@ -89,6 +90,7 @@ const MV_EN = {
     perfLevel0: 'Render budget: all panes live (default)',
     perfLevel1: 'Render budget: light — unfocused panes keep only their title (no layout or paint)',
     perfLevel2: 'Render budget: strong — unfocused panes stop rendering entirely',
+    perfLevel3: 'Render budget: smart — focus stays live, the rest rotate in every 4s',
     parkedTitle: 'Live rendering paused',
     parkedHint: 'Performance mode parks unfocused panes; click this pane to resume',
     viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
@@ -820,7 +822,7 @@ function mvDeleteView(viewId) {
 function mvCyclePerfLevel() {
     mvCommit((current)=>({
             ...current,
-            perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 3
+            perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 4
         }));
 }
 
@@ -1181,7 +1183,13 @@ const MV_CSS = `
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 .mv-perf[data-level="1"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
 .mv-perf[data-level="2"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-warn-primary)}
+.mv-perf[data-level="3"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-success-primary)}
 .mv-live-hidden{display:none}
+.mv-pane-stage{position:relative;width:100%;height:100%}
+.mv-live-frame{width:100%;height:100%}
+.mv-live-frame[data-lit="false"]{display:none}
+.mv-parked-holder{position:absolute;inset:0;display:flex}
+.mv-parked-holder[data-lit="true"]{display:none}
 .mv-parked{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer}
 .mv-parked:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-parked-title{font-size:13px;color:var(--dsw-alias-label-secondary)}
@@ -1300,19 +1308,14 @@ class MvPaneBoundary extends React.Component {
     }
 }
 function PaneHost(props) {
-    const { sessionId, SessionProvider, renderSlot } = props;
+    const { sessionId, SessionProvider, renderSlot, useSessions } = props;
     const [state, setState] = React.useState({
         reference: null,
         error: null
     });
+    const ready = useSessions === undefined ? true : useSessions((snapshot)=>snapshot.phase === 'ready');
     React.useEffect(()=>{
-        if (sessionId === null || sessionId === undefined) {
-            setState({
-                reference: null,
-                error: null
-            });
-            return undefined;
-        }
+        if (sessionId === null || sessionId === undefined || ready !== true) return undefined;
         let reference = null;
         try {
             reference = PTX.sessions.retain(sessionId, {
@@ -1350,7 +1353,8 @@ function PaneHost(props) {
             }
         };
     }, [
-        sessionId
+        sessionId,
+        ready
     ]);
     if (sessionId === null || sessionId === undefined) {
         return h(MvNote, null, T('empty'));
@@ -1656,6 +1660,7 @@ function PaneFrame(props) {
     const status = sessionId === null ? undefined : surface.statuses.get(sessionId);
     const dot = mvDotState(status);
     const level = typeof state.perfLevel === 'number' ? state.perfLevel : 0;
+    const rotating = surface.rotationId === leaf.id;
     const maximized = state.maximized === leaf.id;
     return h('div', {
         className: 'mv-pane',
@@ -1663,8 +1668,18 @@ function PaneFrame(props) {
         'data-pane': '',
         'data-focused': focused ? 'true' : 'false',
         'data-drop': dragging.over === leaf.id && dragging.from !== null && dragging.from !== leaf.id ? 'true' : 'false',
-        onPointerDownCapture: ()=>surface.onFocus(leaf.id),
-        onFocusCapture: ()=>surface.onFocus(leaf.id)
+        onPointerDownCapture: (event)=>{
+            const target = event.target;
+            if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return;
+            if (surface.isRotationGrace()) return;
+            surface.onFocus(leaf.id);
+        },
+        onFocusCapture: (event)=>{
+            const target = event.target;
+            if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return;
+            if (surface.isRotationGrace()) return;
+            surface.onFocus(leaf.id);
+        }
     }, h('div', {
         className: 'mv-head',
         'data-pane-head': ''
@@ -1699,29 +1714,40 @@ function PaneFrame(props) {
         currentViewId: surface.state.currentViewId
     }) : level === 2 && !focused ? h(MvParkedPane, {
         title,
-        onResume: ()=>surface.onFocus(leaf.id)
-    }) : level === 1 && !focused ? h(React.Fragment, null, h('div', {
-        className: 'mv-live-hidden'
+        onResume: ()=>surface.onFocus(leaf.id),
+        rotating: false
+    }) : level === 0 || focused ? h(MvPaneHost, {
+        sessionId,
+        SessionProvider: surface.SessionProvider,
+        renderSlot: surface.renderSlot,
+        useSessions: surface.useSessions
+    }) : h('div', {
+        className: 'mv-pane-stage'
+    }, h('div', {
+        className: 'mv-live-frame',
+        'data-lit': level === 3 && rotating ? 'true' : 'false'
     }, h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,
-        renderSlot: surface.renderSlot
-    })), h(MvParkedPane, {
+        renderSlot: surface.renderSlot,
+        useSessions: surface.useSessions
+    })), h('div', {
+        className: 'mv-parked-holder',
+        'data-lit': level === 3 && rotating ? 'true' : 'false'
+    }, h(MvParkedPane, {
         title,
-        onResume: ()=>surface.onFocus(leaf.id)
-    })) : h(MvPaneHost, {
-        sessionId,
-        SessionProvider: surface.SessionProvider,
-        renderSlot: surface.renderSlot
-    })));
+        onResume: ()=>surface.onFocus(leaf.id),
+        rotating: false
+    })))));
 }
 const MvPaneHost = React.memo(function MvPaneHost(props) {
     return h(PaneHost, {
         sessionId: props.sessionId,
         SessionProvider: props.SessionProvider,
-        renderSlot: props.renderSlot
+        renderSlot: props.renderSlot,
+        useSessions: props.useSessions
     });
-}, (previous, next)=>previous.sessionId === next.sessionId && previous.SessionProvider === next.SessionProvider && previous.renderSlot === next.renderSlot);
+}, (previous, next)=>previous.sessionId === next.sessionId && previous.SessionProvider === next.SessionProvider && previous.renderSlot === next.renderSlot && previous.useSessions === next.useSessions);
 function MvParkedPane(props) {
     const { title, onResume } = props;
     return h('button', {
@@ -1861,9 +1887,13 @@ function MvUpdateDialog(props) {
         'aria-label': T('updateCheck')
     }, body, actions));
 }
+function leavesForRotation(state) {
+    return mvLeaves(state.layout).filter((leaf)=>leaf.sessionId !== null && leaf.id !== state.focused).map((leaf)=>leaf.id);
+}
 function mvPerfTitle(level) {
     if (level === 1) return T('perfLevel1');
     if (level === 2) return T('perfLevel2');
+    if (level === 3) return T('perfLevel3');
     return T('perfLevel0');
 }
 function MvPerfButton() {
@@ -1932,6 +1962,8 @@ function MultiviewStage(props) {
     const state = useMvState();
     const rootRef = React.useRef(null);
     const [narrow, setNarrow] = React.useState(false);
+    const [rotationTick, setRotationTick] = React.useState(0);
+    const rotationGraceRef = React.useRef(0);
     const [drag, setDrag] = React.useState({
         from: null,
         over: null
@@ -1958,6 +1990,19 @@ function MultiviewStage(props) {
         }
     }, [
         list
+    ]);
+    React.useEffect(()=>{
+        rotationGraceRef.current = performance.now() + 900;
+    }, [
+        rotationTick,
+        state.perfLevel
+    ]);
+    React.useEffect(()=>{
+        if (state.perfLevel !== 3) return undefined;
+        const timer = setInterval(()=>setRotationTick((value)=>value + 1), 4000);
+        return ()=>clearInterval(timer);
+    }, [
+        state.perfLevel
     ]);
     React.useEffect(()=>{
         mvUpdateHydrate();
@@ -2033,7 +2078,12 @@ function MultiviewStage(props) {
             window.removeEventListener('pointercancel', up);
         };
     }, []);
+    const rotationCandidates = leavesForRotation(state);
+    const rotationId = state.perfLevel === 3 && rotationCandidates.length > 0 ? rotationCandidates[rotationTick % rotationCandidates.length] : null;
     const surface = {
+        rotationId,
+        useSessions,
+        isRotationGrace: ()=>performance.now() < rotationGraceRef.current,
         state,
         statuses,
         SessionProvider,
