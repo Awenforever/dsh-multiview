@@ -1,0 +1,27 @@
+name: Feature request
+description: Something the split view should do
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you hit
+      description: What were you trying to do when the missing feature got in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to happen
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you already tried
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please check the "Not supported in v1" section of the README — several of those
+        omissions are product decisions (one session per pane, no in-pane session creation, no sidebar
+        file preview inside a pane), and changing them needs an upstream change in DSH itself.

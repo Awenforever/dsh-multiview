@@ -760,7 +760,7 @@ function MultiviewStage(props) {
     h(
       'header',
       { className: 'mv-bar', 'data-window-drag': true },
-      h('span', { className: 'mv-bar-title' }, T('title')),
+      h('span', { className: 'mv-bar-title', title: mvHostTitle() }, T('title')),
       h(
         'div',
         { className: 'mv-seg', role: 'group', 'aria-label': T('shape') },

@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.15';
+const MV_PLUGIN_VERSION = '0.1.16';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -27,6 +27,7 @@ const MV_ZH = {
     maximize: '最大化',
     restore: '还原',
     remove: '清空这一格',
+    hostUnverified: 'DSH {version} 尚未验证',
     openMain: '在原生视图打开',
     shape: '格数',
     shapeN: '{n} 格',
@@ -72,6 +73,7 @@ const MV_EN = {
     maximize: 'Maximize',
     restore: 'Restore',
     remove: 'Clear this pane',
+    hostUnverified: 'DSH {version} is not verified',
     openMain: 'Open in native view',
     shape: 'Pane count',
     shapeN: '{n} panes',
@@ -1208,6 +1210,19 @@ const MV_ICON = {
     play: 'M6 3.6v8.8L12.6 8z',
     views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8'
 };
+function mvHostTitle() {
+    const fallback = T('title');
+    try {
+        const version = window.__DSH_BOOT__?.release?.version;
+        if (typeof version !== 'string' || version === '') return fallback;
+        if (/^0\.2\.[12](?![0-9])/.test(version)) return fallback;
+        return fallback + ' · ' + mvFormat(T('hostUnverified'), {
+            version
+        });
+    } catch (error) {
+        return fallback;
+    }
+}
 
 function mvPhase(session, conversation, summaryBlank) {
     const targeted = conversation.activeTargets !== undefined && conversation.activeTargets.size > 0;
@@ -2044,7 +2059,8 @@ function MultiviewStage(props) {
         className: 'mv-bar',
         'data-window-drag': true
     }, h('span', {
-        className: 'mv-bar-title'
+        className: 'mv-bar-title',
+        title: mvHostTitle()
     }, T('title')), h('div', {
         className: 'mv-seg',
         role: 'group',

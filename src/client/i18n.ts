@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.15'
+const MV_PLUGIN_VERSION = '0.1.16'
 
 const MV_ZH = {
   panel: '分屏',
@@ -27,6 +27,7 @@ const MV_ZH = {
   maximize: '最大化',
   restore: '还原',
   remove: '清空这一格',
+  hostUnverified: 'DSH {version} 尚未验证',
   openMain: '在原生视图打开',
   shape: '格数',
   shapeN: '{n} 格',
@@ -73,6 +74,7 @@ const MV_EN = {
   maximize: 'Maximize',
   restore: 'Restore',
   remove: 'Clear this pane',
+  hostUnverified: 'DSH {version} is not verified',
   openMain: 'Open in native view',
   shape: 'Pane count',
   shapeN: '{n} panes',

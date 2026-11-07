@@ -139,3 +139,22 @@ const MV_ICON = {
   play: 'M6 3.6v8.8L12.6 8z',
   views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8',
 }
+
+/**
+ * Host version note for the toolbar tooltip.
+ *
+ * `engines.dsh` no longer fails closed on a newer minor, so an untested host can
+ * still run the plugin. This says so instead of pretending the build is verified.
+ * @returns the tooltip text, or the plain title when the host is a tested line.
+ */
+function mvHostTitle(): string {
+  const fallback = T('title')
+  try {
+    const version = (window as any).__DSH_BOOT__?.release?.version
+    if (typeof version !== 'string' || version === '') return fallback
+    if (/^0\.2\.[12](?![0-9])/.test(version)) return fallback
+    return fallback + ' · ' + mvFormat(T('hostUnverified'), { version })
+  } catch (error) {
+    return fallback
+  }
+}

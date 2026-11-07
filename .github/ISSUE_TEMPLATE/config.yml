@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Rendering performance across multiple panes
+    url: https://github.com/deepseek-ai/deepseek-harness/discussions/12559
+    about: The per-pane cost lives in DSH's chat renderer; the proposal for a rendering-priority hint is filed upstream.
+  - name: Upstream DSH behaviour (sessions, permissions, providers)
+    url: https://github.com/deepseek-ai/deepseek-harness/discussions
+    about: Anything that is not specific to the split view belongs to the harness project.

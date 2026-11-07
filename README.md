@@ -6,6 +6,8 @@
 
 [中文](README.zh.md) | English
 
+![Four conversations side by side](docs/images/four-panes.png)
+
 ## Install
 
 Install from npm with `dsh plugin add dsh-multiview`, or search for it under **Plugins → Add** in DSH Desktop (a maintainer can also run `plugin_manager install_bundle`), then **quit and reopen** DeepSeek Harness so the client bundle loads again.
@@ -83,6 +85,19 @@ dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
 The overlay's row name is an absolute `file:///` URL to this repo's `index.js` (the Loader anchors relative row names at the profile root, not beside the patch file).
 
 The client only uses public slot surfaces: a keyed `main` panel, a private child slot, `SessionProvider`, the `conversation.content` factory (`variant:'embedded'`), `sessions.retain`, `shortcuts` and `locale`. See [docs/DESIGN.md](docs/DESIGN.md).
+
+## Status and support
+
+Pre-1.0: the surface is stable enough to use daily, but small breaking changes can happen in a minor
+bump, and every one of them is listed in [CHANGELOG.md](CHANGELOG.md). Versions are published from a
+tag by CI with npm provenance, so what npm serves is exactly what this repository built.
+
+`engines.dsh` accepts the whole `0.2.x` line. Builds are verified against `0.2.1-rc.5` and
+`0.2.2-rc.1`; on any other version the toolbar tooltip says so instead of pretending it was tested.
+
+- Bugs and feature requests: [issues](https://github.com/Awenforever/dsh-multiview/issues) (templates ask for the two things that matter — plugin version and host version).
+- Multi-pane rendering cost: filed upstream as [discussion #12559](https://github.com/deepseek-ai/deepseek-harness/discussions/12559).
+- Anything that is not split-view specific (sessions, permissions, providers) belongs to the harness project.
 
 ## License
 

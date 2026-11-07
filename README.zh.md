@@ -6,6 +6,8 @@
 
 English | [中文](README.zh.md)
 
+![四个对话并排](docs/images/four-panes.png)
+
 ## 安装
 
 已发布到 npm：`dsh plugin add dsh-multiview`，或在 DSH Desktop 的 **插件 → 添加** 里搜索安装（维护者也可用 `plugin_manager install_bundle`），然后**完全退出并重新打开** DeepSeek Harness，让客户端 bundle 重新加载。
@@ -85,6 +87,16 @@ dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
 `dev.patch.yml` 里的 row 名用绝对 `file:///` 指向本仓库的 `index.js`（Loader 的相对名锚定在 profile 根，不是 patch 文件旁）。
 
 客户端契约只走公开插槽面：`main` keyed 面板 + 私有子槽 + `SessionProvider` + `conversation.content` factory（`variant:'embedded'`）+ `sessions.retain` + `shortcuts` + `locale`。详见 [docs/DESIGN.md](docs/DESIGN.md)。
+
+## 状态与支持
+
+预 1.0：接口稳定到可以日常使用，但小版本里仍可能出现小范围破坏性变更，每一处都记在 [CHANGELOG.md](CHANGELOG.md)。发布由 CI 从 tag 触发并带 npm provenance，所以 npm 上的包就是本仓库构建出的那一个。
+
+`engines.dsh` 接受整个 `0.2.x`。构建在 `0.2.1-rc.5` 与 `0.2.2-rc.1` 上验证过；其他版本会在顶栏 tooltip 里注明"尚未验证"，而不是假装验证过。
+
+- Bug 与需求：[issues](https://github.com/Awenforever/dsh-multiview/issues)（模板会问最要紧的两件事：插件版本、宿主版本）。
+- 多格渲染成本：已在上游立项 [discussion #12559](https://github.com/deepseek-ai/deepseek-harness/discussions/12559)。
+- 非分屏专属的问题（会话、权限、模型供应商）属于 harness 项目本身。
 
 ## 许可
 

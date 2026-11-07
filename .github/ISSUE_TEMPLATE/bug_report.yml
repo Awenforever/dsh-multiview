@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in the split view misbehaves
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The fastest way to a fix is a reproduction that does not depend on your private sessions.
+  - type: input
+    id: version
+    attributes:
+      label: dsh-multiview version
+      description: From the Plugins page, or `npm view dsh-multiview version`.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: DSH version
+      description: From Settings → About, or `window.__DSH_BOOT__.release.version` in the devtools console.
+    validations:
+      required: true
+  - type: dropdown
+    id: panes
+    attributes:
+      label: Pane layout
+      options: ['2 panes', '3 panes', '4 panes', 'maximized one pane']
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Split
+        2. Bind two sessions
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors (if any)
+      description: DevTools → Console; any line starting with `dsh-multiview:` is ours.
+      render: text
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Please confirm
+      options:
+        - label: I removed private conversation content from screenshots and logs.
+          required: true

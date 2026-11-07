@@ -1,8 +1,8 @@
 name: verify
 
 # Every push and pull request proves the bundle still builds, the manifest is
-# still coherent and the model logic still passes. Publishing stays in
-# publish.yml, so a red build can never reach npm.
+# still coherent, the model logic still passes and the panel still renders.
+# Publishing stays in publish.yml, so a red build can never reach npm.
 on:
   push:
     branches: [main]
@@ -28,5 +28,5 @@ jobs:
       - name: Verify bundle, manifest and copy
         run: node scripts/check.mjs
 
-      - name: Unit tests
-        run: node --test test/model.test.ts
+      - name: Unit and boot tests
+        run: node --test test/model.test.ts test/boot.test.mjs
