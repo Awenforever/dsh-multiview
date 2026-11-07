@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.6';
+const MV_PLUGIN_VERSION = '0.1.7';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1128,7 +1128,7 @@ const MV_CSS = `
 .mv-views{position:relative;display:inline-flex}
 .mv-views-toggle{position:relative}
 .mv-views-toggle[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.mv-views-count{position:absolute;top:1px;right:1px;min-width:11px;padding:0 3px;border-radius:999px;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-bg-base);font-size:9px;line-height:11px;text-align:center}
+.mv-views-count{position:absolute;top:-3px;right:-4px;min-width:12px;height:12px;padding:0 2px;border:1.5px solid var(--dsw-alias-bg-base);border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font-size:8px;line-height:12px;text-align:center;pointer-events:none}
 .mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base)}
 .mv-views-empty{padding:10px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
 .mv-views-row{display:flex;align-items:center;gap:4px;border-radius:6px}
@@ -1153,9 +1153,9 @@ const MV_CSS = `
 .mv-picker-owner{flex:none;max-width:45%;padding:0 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mv-picker-item[data-owned="true"]{opacity:0.45;cursor:not-allowed}
 .mv-picker-item[data-owned="true"]:hover{background:transparent}
-.mv-bar{color:var(--dsw-alias-label-secondary)}
-.mv-icon{color:var(--dsw-alias-label-secondary)}
-.mv-icon:hover{color:var(--dsw-alias-label-primary)}
+.mv-bar{color:var(--dsw-alias-label-primary)}
+.mv-icon{color:var(--dsw-alias-label-primary)}
+.mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
@@ -1756,7 +1756,9 @@ function MvUpdateButton() {
             setOpen(true);
             if (update.available !== true) void mvUpdateCheck(true);
         }
-    }, MvGlyph(MV_ICON.refresh)), open ? h(MvUpdateDialog, {
+    }, h(MvGlyph, {
+        path: MV_ICON.refresh
+    })), open ? h(MvUpdateDialog, {
         update,
         caption,
         onClose: ()=>setOpen(false)
@@ -1816,7 +1818,9 @@ function MvViewsButton(props) {
         title: T('views'),
         'aria-label': T('views'),
         onClick: ()=>setOpen((value)=>!value)
-    }, MvGlyph(MV_ICON.views), views.length > 0 ? h('span', {
+    }, h(MvGlyph, {
+        path: MV_ICON.views
+    }), views.length > 0 ? h('span', {
         className: 'mv-views-count'
     }, String(views.length)) : null), open ? h('div', {
         className: 'mv-views-pop',

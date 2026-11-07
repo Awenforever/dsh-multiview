@@ -455,7 +455,7 @@ function MvUpdateButton() {
           if (update.available !== true) void mvUpdateCheck(true)
         },
       },
-      MvGlyph(MV_ICON.refresh),
+      h(MvGlyph, { path: MV_ICON.refresh }),
     ),
     open ? h(MvUpdateDialog, { update, caption, onClose: () => setOpen(false) }) : null,
   )
@@ -534,7 +534,7 @@ function MvViewsButton(props) {
         'aria-label': T('views'),
         onClick: () => setOpen((value) => !value),
       },
-      MvGlyph(MV_ICON.views),
+      h(MvGlyph, { path: MV_ICON.views }),
       views.length > 0 ? h('span', { className: 'mv-views-count' }, String(views.length)) : null,
     ),
     open
