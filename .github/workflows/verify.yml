@@ -1,0 +1,32 @@
+name: verify
+
+# Every push and pull request proves the bundle still builds, the manifest is
+# still coherent and the model logic still passes. Publishing stays in
+# publish.yml, so a red build can never reach npm.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build
+        run: node scripts/build.mjs
+
+      - name: Verify bundle, manifest and copy
+        run: node scripts/check.mjs
+
+      - name: Unit tests
+        run: node --test test/model.test.ts
