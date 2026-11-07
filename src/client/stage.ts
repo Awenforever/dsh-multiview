@@ -310,6 +310,7 @@ function PaneFrame(props) {
   const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty')
   const status = sessionId === null ? undefined : surface.statuses.get(sessionId)
   const dot = mvDotState(status)
+  const level = typeof state.perfLevel === 'number' ? state.perfLevel : 0
   const maximized = state.maximized === leaf.id
 
   return h(
@@ -359,9 +360,18 @@ function PaneFrame(props) {
       { className: 'mv-pane-body' },
       sessionId === null
         ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id), views: surface.state.views, currentViewId: surface.state.currentViewId })
-        : surface.state.perfMode === true && !focused
+        : level === 2 && !focused
           ? h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id) })
-          : h(MvPaneHost, {
+          : level === 1 && !focused
+            ? h(React.Fragment, null,
+                h('div', { className: 'mv-live-hidden' }, h(MvPaneHost, {
+                  sessionId,
+                  SessionProvider: surface.SessionProvider,
+                  renderSlot: surface.renderSlot,
+                })),
+                h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id) }),
+              )
+            : h(MvPaneHost, {
             sessionId,
             SessionProvider: surface.SessionProvider,
             renderSlot: surface.renderSlot,
@@ -534,19 +544,25 @@ function MvUpdateDialog(props) {
   )
 }
 
-/** Optional performance mode: park unfocused panes so only one pane renders live. */
+/** Title for the rendering-budget button, one per level. */
+function mvPerfTitle(level: number): string {
+  if (level === 1) return T('perfLevel1')
+  if (level === 2) return T('perfLevel2')
+  return T('perfLevel0')
+}
+
+/** Optional rendering budget for unfocused panes: off, light, strong. */
 function MvPerfButton() {
   const state = useMvState()
-  const on = state.perfMode === true
   return h(
     'button',
     {
       type: 'button',
       className: 'mv-icon mv-perf',
-      'data-active': on ? 'true' : 'false',
-      title: on ? T('perfModeOn') : T('perfModeOff'),
+      'data-level': String(state.perfLevel ?? 0),
+      title: mvPerfTitle(state.perfLevel ?? 0),
       'aria-label': T('perfMode'),
-      onClick: () => mvTogglePerfMode(),
+      onClick: () => mvCyclePerfLevel(),
     },
     h(MvGlyph, { path: MV_ICON.perf }),
   )

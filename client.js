@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.11';
+const MV_PLUGIN_VERSION = '0.1.12';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -34,9 +34,10 @@ const MV_ZH = {
     waiting: '等待你处理',
     unread: '有新结果',
     views: '视图',
-    perfMode: '性能模式',
-    perfModeOn: '性能模式已开启：只有聚焦的那一格实时渲染',
-    perfModeOff: '性能模式已关闭：每一格都实时渲染',
+    perfMode: '渲染预算',
+    perfLevel0: '渲染预算：全部实时（默认）',
+    perfLevel1: '渲染预算：轻档 —— 非聚焦格只保留标题（跳过布局与绘制）',
+    perfLevel2: '渲染预算：强档 —— 非聚焦格完全暂停渲染',
     parkedTitle: '实时渲染已暂停',
     parkedHint: '性能模式下非聚焦格不渲染；点击这一格恢复',
     viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
@@ -84,9 +85,10 @@ const MV_EN = {
     waiting: 'Waiting for you',
     unread: 'New result',
     views: 'Views',
-    perfMode: 'Performance mode',
-    perfModeOn: 'Performance mode on: only the focused pane renders live',
-    perfModeOff: 'Performance mode off: every pane renders live',
+    perfMode: 'Render budget',
+    perfLevel0: 'Render budget: all panes live (default)',
+    perfLevel1: 'Render budget: light — unfocused panes keep only their title (no layout or paint)',
+    perfLevel2: 'Render budget: strong — unfocused panes stop rendering entirely',
     parkedTitle: 'Live rendering paused',
     parkedHint: 'Performance mode parks unfocused panes; click this pane to resume',
     viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
@@ -454,7 +456,7 @@ function mvInitialState() {
         reconciled: false,
         views: [],
         currentViewId: null,
-        perfMode: false
+        perfLevel: 0
     };
 }
 let mvState = mvInitialState();
@@ -482,7 +484,7 @@ function mvScheduleSave() {
                 seeded: mvState.seeded,
                 views: mvState.views,
                 currentViewId: mvState.currentViewId,
-                perfMode: mvState.perfMode === true
+                perfLevel: typeof mvState.perfLevel === 'number' ? mvState.perfLevel : 0
             };
             window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable));
         } catch (error) {}
@@ -604,7 +606,7 @@ function mvHydrate() {
         reconciled: false,
         views,
         currentViewId,
-        perfMode: raw.perfMode === true
+        perfLevel: typeof raw.perfLevel === 'number' ? raw.perfLevel : raw.perfMode === true ? 2 : 0
     };
 }
 function mvReset() {
@@ -815,10 +817,10 @@ function mvDeleteView(viewId) {
         };
     });
 }
-function mvTogglePerfMode() {
+function mvCyclePerfLevel() {
     mvCommit((current)=>({
             ...current,
-            perfMode: current.perfMode !== true
+            perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 3
         }));
 }
 
@@ -1177,7 +1179,9 @@ const MV_CSS = `
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
-.mv-perf[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
+.mv-perf[data-level="1"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
+.mv-perf[data-level="2"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-warn-primary)}
+.mv-live-hidden{display:none}
 .mv-parked{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer}
 .mv-parked:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-parked-title{font-size:13px;color:var(--dsw-alias-label-secondary)}
@@ -1651,6 +1655,7 @@ function PaneFrame(props) {
     const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty');
     const status = sessionId === null ? undefined : surface.statuses.get(sessionId);
     const dot = mvDotState(status);
+    const level = typeof state.perfLevel === 'number' ? state.perfLevel : 0;
     const maximized = state.maximized === leaf.id;
     return h('div', {
         className: 'mv-pane',
@@ -1692,10 +1697,19 @@ function PaneFrame(props) {
         onPick: (id)=>surface.onBind(leaf.id, id),
         views: surface.state.views,
         currentViewId: surface.state.currentViewId
-    }) : surface.state.perfMode === true && !focused ? h(MvParkedPane, {
+    }) : level === 2 && !focused ? h(MvParkedPane, {
         title,
         onResume: ()=>surface.onFocus(leaf.id)
-    }) : h(MvPaneHost, {
+    }) : level === 1 && !focused ? h(React.Fragment, null, h('div', {
+        className: 'mv-live-hidden'
+    }, h(MvPaneHost, {
+        sessionId,
+        SessionProvider: surface.SessionProvider,
+        renderSlot: surface.renderSlot
+    })), h(MvParkedPane, {
+        title,
+        onResume: ()=>surface.onFocus(leaf.id)
+    })) : h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,
         renderSlot: surface.renderSlot
@@ -1847,16 +1861,20 @@ function MvUpdateDialog(props) {
         'aria-label': T('updateCheck')
     }, body, actions));
 }
+function mvPerfTitle(level) {
+    if (level === 1) return T('perfLevel1');
+    if (level === 2) return T('perfLevel2');
+    return T('perfLevel0');
+}
 function MvPerfButton() {
     const state = useMvState();
-    const on = state.perfMode === true;
     return h('button', {
         type: 'button',
         className: 'mv-icon mv-perf',
-        'data-active': on ? 'true' : 'false',
-        title: on ? T('perfModeOn') : T('perfModeOff'),
+        'data-level': String(state.perfLevel ?? 0),
+        title: mvPerfTitle(state.perfLevel ?? 0),
         'aria-label': T('perfMode'),
-        onClick: ()=>mvTogglePerfMode()
+        onClick: ()=>mvCyclePerfLevel()
     }, h(MvGlyph, {
         path: MV_ICON.perf
     }));

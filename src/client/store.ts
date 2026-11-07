@@ -16,7 +16,7 @@ function mvInitialState(): any {
     reconciled: false,
     views: [],
     currentViewId: null,
-    perfMode: false,
+    perfLevel: 0,
   }
 }
 
@@ -51,7 +51,7 @@ function mvScheduleSave(): void {
         seeded: mvState.seeded,
         views: mvState.views,
         currentViewId: mvState.currentViewId,
-        perfMode: mvState.perfMode === true,
+        perfLevel: typeof mvState.perfLevel === 'number' ? mvState.perfLevel : 0,
       }
       window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable))
     } catch (error) {
@@ -191,7 +191,7 @@ function mvHydrate(): void {
     reconciled: false,
     views,
     currentViewId,
-    perfMode: raw.perfMode === true,
+    perfLevel: typeof raw.perfLevel === 'number' ? raw.perfLevel : raw.perfMode === true ? 2 : 0,
   }
 }
 
@@ -385,7 +385,7 @@ function mvDeleteView(viewId: string): void {
   })
 }
 
-/** Toggle the optional performance mode: only the focused pane renders live. */
-function mvTogglePerfMode(): void {
-  mvCommit((current) => ({ ...current, perfMode: current.perfMode !== true }))
+/** Cycle the optional rendering budget: 0 all live, 1 light (layout skipped), 2 strong (parked). */
+function mvCyclePerfLevel(): void {
+  mvCommit((current) => ({ ...current, perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 3 }))
 }
