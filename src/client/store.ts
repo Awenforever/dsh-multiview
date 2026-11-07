@@ -16,7 +16,7 @@ function mvInitialState(): any {
     reconciled: false,
     views: [],
     currentViewId: null,
-    perfLevel: 0,
+    frozen: [],
   }
 }
 
@@ -51,7 +51,7 @@ function mvScheduleSave(): void {
         seeded: mvState.seeded,
         views: mvState.views,
         currentViewId: mvState.currentViewId,
-        perfLevel: typeof mvState.perfLevel === 'number' ? mvState.perfLevel : 0,
+        frozen: mvState.frozen ?? [],
       }
       window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable))
     } catch (error) {
@@ -191,7 +191,7 @@ function mvHydrate(): void {
     reconciled: false,
     views,
     currentViewId,
-    perfLevel: typeof raw.perfLevel === 'number' ? raw.perfLevel : raw.perfMode === true ? 2 : 0,
+    frozen: Array.isArray(raw.frozen) ? raw.frozen.filter((id) => typeof id === 'string') : [],
   }
 }
 
@@ -385,7 +385,11 @@ function mvDeleteView(viewId: string): void {
   })
 }
 
-/** Cycle the optional rendering budget: 0 all live, 1 light (layout skipped), 2 strong (parked). */
-function mvCyclePerfLevel(): void {
-  mvCommit((current) => ({ ...current, perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 4 }))
+/** Freeze or resume one pane's live rendering; only the user changes this. */
+function mvToggleFreeze(leafId: string): void {
+  mvCommit((current) => {
+    const frozen = current.frozen ?? []
+    const next = frozen.includes(leafId) ? frozen.filter((id) => id !== leafId) : [...frozen, leafId]
+    return { ...current, frozen: next }
+  })
 }

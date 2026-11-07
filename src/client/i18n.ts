@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.13'
+const MV_PLUGIN_VERSION = '0.1.14'
 
 const MV_ZH = {
   panel: '分屏',
@@ -34,13 +34,10 @@ const MV_ZH = {
   waiting: '等待你处理',
   unread: '有新结果',
   views: '视图',
-  perfMode: '渲染预算',
-  perfLevel0: '渲染预算：全部实时（默认）',
-  perfLevel1: '渲染预算：轻档 —— 非聚焦格只保留标题（跳过布局与绘制）',
-  perfLevel2: '渲染预算：强档 —— 非聚焦格完全暂停渲染',
-  perfLevel3: '渲染预算：智能 —— 焦点格实时，其余轮流点亮（每 4 秒）',
-  parkedTitle: '实时渲染已暂停',
-  parkedHint: '性能模式下非聚焦格不渲染；点击这一格恢复',
+  freezePane: '冻结这一格（停止实时渲染）',
+  resumePane: '恢复实时渲染',
+  parkedTitle: '已冻结 —— 点此恢复实时渲染',
+  parkedHint: '这一格已被你手动冻结；点击恢复实时渲染',
   viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
   viewsCurrent: '当前分屏',
   viewsDelete: '删除视图',
@@ -87,13 +84,10 @@ const MV_EN = {
   waiting: 'Waiting for you',
   unread: 'New result',
   views: 'Views',
-  perfMode: 'Render budget',
-  perfLevel0: 'Render budget: all panes live (default)',
-  perfLevel1: 'Render budget: light — unfocused panes keep only their title (no layout or paint)',
-  perfLevel2: 'Render budget: strong — unfocused panes stop rendering entirely',
-  perfLevel3: 'Render budget: smart — focus stays live, the rest rotate in every 4s',
-  parkedTitle: 'Live rendering paused',
-  parkedHint: 'Performance mode parks unfocused panes; click this pane to resume',
+  freezePane: 'Freeze this pane (stop live rendering)',
+  resumePane: 'Resume live rendering',
+  parkedTitle: 'Frozen — click to resume live rendering',
+  parkedHint: 'You froze this pane; click to resume live rendering',
   viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
   viewsCurrent: 'Current split',
   viewsDelete: 'Delete view',

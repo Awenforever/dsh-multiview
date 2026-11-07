@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.13';
+const MV_PLUGIN_VERSION = '0.1.14';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -34,13 +34,10 @@ const MV_ZH = {
     waiting: '等待你处理',
     unread: '有新结果',
     views: '视图',
-    perfMode: '渲染预算',
-    perfLevel0: '渲染预算：全部实时（默认）',
-    perfLevel1: '渲染预算：轻档 —— 非聚焦格只保留标题（跳过布局与绘制）',
-    perfLevel2: '渲染预算：强档 —— 非聚焦格完全暂停渲染',
-    perfLevel3: '渲染预算：智能 —— 焦点格实时，其余轮流点亮（每 4 秒）',
-    parkedTitle: '实时渲染已暂停',
-    parkedHint: '性能模式下非聚焦格不渲染；点击这一格恢复',
+    freezePane: '冻结这一格（停止实时渲染）',
+    resumePane: '恢复实时渲染',
+    parkedTitle: '已冻结 —— 点此恢复实时渲染',
+    parkedHint: '这一格已被你手动冻结；点击恢复实时渲染',
     viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
     viewsCurrent: '当前分屏',
     viewsDelete: '删除视图',
@@ -86,13 +83,10 @@ const MV_EN = {
     waiting: 'Waiting for you',
     unread: 'New result',
     views: 'Views',
-    perfMode: 'Render budget',
-    perfLevel0: 'Render budget: all panes live (default)',
-    perfLevel1: 'Render budget: light — unfocused panes keep only their title (no layout or paint)',
-    perfLevel2: 'Render budget: strong — unfocused panes stop rendering entirely',
-    perfLevel3: 'Render budget: smart — focus stays live, the rest rotate in every 4s',
-    parkedTitle: 'Live rendering paused',
-    parkedHint: 'Performance mode parks unfocused panes; click this pane to resume',
+    freezePane: 'Freeze this pane (stop live rendering)',
+    resumePane: 'Resume live rendering',
+    parkedTitle: 'Frozen — click to resume live rendering',
+    parkedHint: 'You froze this pane; click to resume live rendering',
     viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
     viewsCurrent: 'Current split',
     viewsDelete: 'Delete view',
@@ -458,7 +452,7 @@ function mvInitialState() {
         reconciled: false,
         views: [],
         currentViewId: null,
-        perfLevel: 0
+        frozen: []
     };
 }
 let mvState = mvInitialState();
@@ -486,7 +480,7 @@ function mvScheduleSave() {
                 seeded: mvState.seeded,
                 views: mvState.views,
                 currentViewId: mvState.currentViewId,
-                perfLevel: typeof mvState.perfLevel === 'number' ? mvState.perfLevel : 0
+                frozen: mvState.frozen ?? []
             };
             window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable));
         } catch (error) {}
@@ -608,7 +602,7 @@ function mvHydrate() {
         reconciled: false,
         views,
         currentViewId,
-        perfLevel: typeof raw.perfLevel === 'number' ? raw.perfLevel : raw.perfMode === true ? 2 : 0
+        frozen: Array.isArray(raw.frozen) ? raw.frozen.filter((id)=>typeof id === 'string') : []
     };
 }
 function mvReset() {
@@ -819,11 +813,18 @@ function mvDeleteView(viewId) {
         };
     });
 }
-function mvCyclePerfLevel() {
-    mvCommit((current)=>({
+function mvToggleFreeze(leafId) {
+    mvCommit((current)=>{
+        const frozen = current.frozen ?? [];
+        const next = frozen.includes(leafId) ? frozen.filter((id)=>id !== leafId) : [
+            ...frozen,
+            leafId
+        ];
+        return {
             ...current,
-            perfLevel: ((typeof current.perfLevel === 'number' ? current.perfLevel : 0) + 1) % 4
-        }));
+            frozen: next
+        };
+    });
 }
 
 const MV_UPDATE_KEY = 'dsh.multiview.update.v1';
@@ -1181,15 +1182,8 @@ const MV_CSS = `
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
-.mv-perf[data-level="1"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
-.mv-perf[data-level="2"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-warn-primary)}
-.mv-perf[data-level="3"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-success-primary)}
+
 .mv-live-hidden{display:none}
-.mv-pane-stage{position:relative;width:100%;height:100%}
-.mv-live-frame{width:100%;height:100%}
-.mv-live-frame[data-lit="false"]{display:none}
-.mv-parked-holder{position:absolute;inset:0;display:flex}
-.mv-parked-holder[data-lit="true"]{display:none}
 .mv-parked{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer}
 .mv-parked:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-parked-title{font-size:13px;color:var(--dsw-alias-label-secondary)}
@@ -1238,7 +1232,8 @@ const MV_ICON = {
     external: 'M6 10L13 3M9 3h4v4',
     updateCheck: 'M8 2a6 6 0 1 0 0 12A6 6 0 1 0 8 2zM8 10.7V5.7M5.6 8.1 8 5.6l2.4 2.5',
     updateInstall: 'M3 9.5v3c0 .6.45 1 1 1h8c.55 0 1-.4 1-1v-3M8 2.6v6.2M5.4 6.4 8 9l2.6-2.6',
-    perf: 'M2.6 12.2a5.4 5.4 0 1 1 10.8 0M8 12.2 10.5 7.4',
+    pause: 'M6 3.5v9M10 3.5v9',
+    play: 'M6 3.6v8.8L12.6 8z',
     views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8'
 };
 
@@ -1659,8 +1654,7 @@ function PaneFrame(props) {
     const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty');
     const status = sessionId === null ? undefined : surface.statuses.get(sessionId);
     const dot = mvDotState(status);
-    const level = typeof state.perfLevel === 'number' ? state.perfLevel : 0;
-    const rotating = surface.rotationId === leaf.id;
+    const frozen = (state.frozen ?? []).includes(leaf.id);
     const maximized = state.maximized === leaf.id;
     return h('div', {
         className: 'mv-pane',
@@ -1671,13 +1665,11 @@ function PaneFrame(props) {
         onPointerDownCapture: (event)=>{
             const target = event.target;
             if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return;
-            if (surface.isRotationGrace()) return;
             surface.onFocus(leaf.id);
         },
         onFocusCapture: (event)=>{
             const target = event.target;
             if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return;
-            if (surface.isRotationGrace()) return;
             surface.onFocus(leaf.id);
         }
     }, h('div', {
@@ -1695,6 +1687,10 @@ function PaneFrame(props) {
     }, title), h('div', {
         className: 'mv-head-actions'
     }, h(MvIconButton, {
+        label: frozen ? T('resumePane') : T('freezePane'),
+        path: frozen ? MV_ICON.play : MV_ICON.pause,
+        onClick: ()=>surface.onToggleFreeze(leaf.id)
+    }), h(MvIconButton, {
         label: maximized ? T('restore') : T('maximize'),
         path: maximized ? MV_ICON.restore : MV_ICON.maximize,
         onClick: ()=>surface.onMaximize(leaf.id)
@@ -1712,33 +1708,16 @@ function PaneFrame(props) {
         onPick: (id)=>surface.onBind(leaf.id, id),
         views: surface.state.views,
         currentViewId: surface.state.currentViewId
-    }) : level === 2 && !focused ? h(MvParkedPane, {
+    }) : frozen ? h(MvParkedPane, {
         title,
-        onResume: ()=>surface.onFocus(leaf.id),
-        rotating: false
-    }) : level === 0 || focused ? h(MvPaneHost, {
+        onResume: ()=>surface.onToggleFreeze(leaf.id),
+        paused: true
+    }) : h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,
         renderSlot: surface.renderSlot,
         useSessions: surface.useSessions
-    }) : h('div', {
-        className: 'mv-pane-stage'
-    }, h('div', {
-        className: 'mv-live-frame',
-        'data-lit': level === 3 && rotating ? 'true' : 'false'
-    }, h(MvPaneHost, {
-        sessionId,
-        SessionProvider: surface.SessionProvider,
-        renderSlot: surface.renderSlot,
-        useSessions: surface.useSessions
-    })), h('div', {
-        className: 'mv-parked-holder',
-        'data-lit': level === 3 && rotating ? 'true' : 'false'
-    }, h(MvParkedPane, {
-        title,
-        onResume: ()=>surface.onFocus(leaf.id),
-        rotating: false
-    })))));
+    })));
 }
 const MvPaneHost = React.memo(function MvPaneHost(props) {
     return h(PaneHost, {
@@ -1887,28 +1866,6 @@ function MvUpdateDialog(props) {
         'aria-label': T('updateCheck')
     }, body, actions));
 }
-function leavesForRotation(state) {
-    return mvLeaves(state.layout).filter((leaf)=>leaf.sessionId !== null && leaf.id !== state.focused).map((leaf)=>leaf.id);
-}
-function mvPerfTitle(level) {
-    if (level === 1) return T('perfLevel1');
-    if (level === 2) return T('perfLevel2');
-    if (level === 3) return T('perfLevel3');
-    return T('perfLevel0');
-}
-function MvPerfButton() {
-    const state = useMvState();
-    return h('button', {
-        type: 'button',
-        className: 'mv-icon mv-perf',
-        'data-level': String(state.perfLevel ?? 0),
-        title: mvPerfTitle(state.perfLevel ?? 0),
-        'aria-label': T('perfMode'),
-        onClick: ()=>mvCyclePerfLevel()
-    }, h(MvGlyph, {
-        path: MV_ICON.perf
-    }));
-}
 function MvViewsButton(props) {
     const { views, currentKey } = props;
     const [open, setOpen] = React.useState(false);
@@ -1962,8 +1919,6 @@ function MultiviewStage(props) {
     const state = useMvState();
     const rootRef = React.useRef(null);
     const [narrow, setNarrow] = React.useState(false);
-    const [rotationTick, setRotationTick] = React.useState(0);
-    const rotationGraceRef = React.useRef(0);
     const [drag, setDrag] = React.useState({
         from: null,
         over: null
@@ -1990,19 +1945,6 @@ function MultiviewStage(props) {
         }
     }, [
         list
-    ]);
-    React.useEffect(()=>{
-        rotationGraceRef.current = performance.now() + 900;
-    }, [
-        rotationTick,
-        state.perfLevel
-    ]);
-    React.useEffect(()=>{
-        if (state.perfLevel !== 3) return undefined;
-        const timer = setInterval(()=>setRotationTick((value)=>value + 1), 4000);
-        return ()=>clearInterval(timer);
-    }, [
-        state.perfLevel
     ]);
     React.useEffect(()=>{
         mvUpdateHydrate();
@@ -2078,12 +2020,9 @@ function MultiviewStage(props) {
             window.removeEventListener('pointercancel', up);
         };
     }, []);
-    const rotationCandidates = leavesForRotation(state);
-    const rotationId = state.perfLevel === 3 && rotationCandidates.length > 0 ? rotationCandidates[rotationTick % rotationCandidates.length] : null;
     const surface = {
-        rotationId,
         useSessions,
-        isRotationGrace: ()=>performance.now() < rotationGraceRef.current,
+        onToggleFreeze: mvToggleFreeze,
         state,
         statuses,
         SessionProvider,
@@ -2182,7 +2121,7 @@ function MultiviewStage(props) {
         className: 'mv-chip',
         'data-active': 'true',
         onClick: mvRestore
-    }, T('restore')), h(MvPerfButton, null), h(MvViewsButton, {
+    }, T('restore')), h(MvViewsButton, {
         views: state.views ?? [],
         currentKey: mvViewKey(state.layout)
     }), h(MvUpdateButton, null), h('span', {
