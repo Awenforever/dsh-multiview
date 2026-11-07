@@ -16,6 +16,7 @@ function mvInitialState(): any {
     reconciled: false,
     views: [],
     currentViewId: null,
+    perfMode: false,
   }
 }
 
@@ -50,6 +51,7 @@ function mvScheduleSave(): void {
         seeded: mvState.seeded,
         views: mvState.views,
         currentViewId: mvState.currentViewId,
+        perfMode: mvState.perfMode === true,
       }
       window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable))
     } catch (error) {
@@ -189,6 +191,7 @@ function mvHydrate(): void {
     reconciled: false,
     views,
     currentViewId,
+    perfMode: raw.perfMode === true,
   }
 }
 
@@ -380,4 +383,9 @@ function mvDeleteView(viewId: string): void {
       currentViewId: current.currentViewId === viewId ? null : current.currentViewId,
     }
   })
+}
+
+/** Toggle the optional performance mode: only the focused pane renders live. */
+function mvTogglePerfMode(): void {
+  mvCommit((current) => ({ ...current, perfMode: current.perfMode !== true }))
 }

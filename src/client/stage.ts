@@ -359,7 +359,9 @@ function PaneFrame(props) {
       { className: 'mv-pane-body' },
       sessionId === null
         ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id), views: surface.state.views, currentViewId: surface.state.currentViewId })
-        : h(MvPaneHost, {
+        : surface.state.perfMode === true && !focused
+          ? h(MvParkedPane, { title, onResume: () => surface.onFocus(leaf.id) })
+          : h(MvPaneHost, {
             sessionId,
             SessionProvider: surface.SessionProvider,
             renderSlot: surface.renderSlot,
@@ -385,6 +387,22 @@ const MvPaneHost = React.memo(
     previous.SessionProvider === next.SessionProvider &&
     previous.renderSlot === next.renderSlot,
 )
+
+/** Placeholder for a pane parked by performance mode: no transcript, no live work. */
+function MvParkedPane(props) {
+  const { title, onResume } = props
+  return h(
+    'button',
+    {
+      type: 'button',
+      className: 'mv-parked',
+      onClick: onResume,
+      title: T('parkedHint'),
+    },
+    h('span', { className: 'mv-parked-title' }, title),
+    h('span', { className: 'mv-parked-note' }, T('parkedTitle')),
+  )
+}
 
 /** Dispatch one tree node to its renderer. */
 function renderMvNode(node: any, surface: any): any {
@@ -513,6 +531,24 @@ function MvUpdateDialog(props) {
       },
     },
     h('div', { className: 'mv-dialog', role: 'dialog', 'aria-label': T('updateCheck') }, body, actions),
+  )
+}
+
+/** Optional performance mode: park unfocused panes so only one pane renders live. */
+function MvPerfButton() {
+  const state = useMvState()
+  const on = state.perfMode === true
+  return h(
+    'button',
+    {
+      type: 'button',
+      className: 'mv-icon mv-perf',
+      'data-active': on ? 'true' : 'false',
+      title: on ? T('perfModeOn') : T('perfModeOff'),
+      'aria-label': T('perfMode'),
+      onClick: () => mvTogglePerfMode(),
+    },
+    h(MvGlyph, { path: MV_ICON.perf }),
   )
 }
 
@@ -767,6 +803,7 @@ function MultiviewStage(props) {
       state.maximized === null
         ? null
         : h('button', { type: 'button', className: 'mv-chip', 'data-active': 'true', onClick: mvRestore }, T('restore')),
+      h(MvPerfButton, null),
       h(MvViewsButton, { views: state.views ?? [], currentKey: mvViewKey(state.layout) }),
       h(MvUpdateButton, null),
       h('span', { className: 'mv-bar-spacer' }),

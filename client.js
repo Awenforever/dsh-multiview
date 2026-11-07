@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.10';
+const MV_PLUGIN_VERSION = '0.1.11';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -34,6 +34,11 @@ const MV_ZH = {
     waiting: '等待你处理',
     unread: '有新结果',
     views: '视图',
+    perfMode: '性能模式',
+    perfModeOn: '性能模式已开启：只有聚焦的那一格实时渲染',
+    perfModeOff: '性能模式已关闭：每一格都实时渲染',
+    parkedTitle: '实时渲染已暂停',
+    parkedHint: '性能模式下非聚焦格不渲染；点击这一格恢复',
     viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
     viewsCurrent: '当前分屏',
     viewsDelete: '删除视图',
@@ -79,6 +84,11 @@ const MV_EN = {
     waiting: 'Waiting for you',
     unread: 'New result',
     views: 'Views',
+    perfMode: 'Performance mode',
+    perfModeOn: 'Performance mode on: only the focused pane renders live',
+    perfModeOff: 'Performance mode off: every pane renders live',
+    parkedTitle: 'Live rendering paused',
+    parkedHint: 'Performance mode parks unfocused panes; click this pane to resume',
     viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
     viewsCurrent: 'Current split',
     viewsDelete: 'Delete view',
@@ -443,7 +453,8 @@ function mvInitialState() {
         seeded: false,
         reconciled: false,
         views: [],
-        currentViewId: null
+        currentViewId: null,
+        perfMode: false
     };
 }
 let mvState = mvInitialState();
@@ -470,7 +481,8 @@ function mvScheduleSave() {
                 preset: mvState.preset,
                 seeded: mvState.seeded,
                 views: mvState.views,
-                currentViewId: mvState.currentViewId
+                currentViewId: mvState.currentViewId,
+                perfMode: mvState.perfMode === true
             };
             window.localStorage.setItem(MV_STORAGE_KEY, JSON.stringify(durable));
         } catch (error) {}
@@ -591,7 +603,8 @@ function mvHydrate() {
         seeded: raw.seeded === true,
         reconciled: false,
         views,
-        currentViewId
+        currentViewId,
+        perfMode: raw.perfMode === true
     };
 }
 function mvReset() {
@@ -801,6 +814,12 @@ function mvDeleteView(viewId) {
             currentViewId: current.currentViewId === viewId ? null : current.currentViewId
         };
     });
+}
+function mvTogglePerfMode() {
+    mvCommit((current)=>({
+            ...current,
+            perfMode: current.perfMode !== true
+        }));
 }
 
 const MV_UPDATE_KEY = 'dsh.multiview.update.v1';
@@ -1158,6 +1177,11 @@ const MV_CSS = `
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
+.mv-perf[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
+.mv-parked{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer}
+.mv-parked:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-parked-title{font-size:13px;color:var(--dsw-alias-label-secondary)}
+.mv-parked-note{font-size:11px;color:var(--dsw-alias-label-tertiary)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
 `;
 function MvGlyph(props) {
@@ -1202,6 +1226,7 @@ const MV_ICON = {
     external: 'M6 10L13 3M9 3h4v4',
     updateCheck: 'M8 2a6 6 0 1 0 0 12A6 6 0 1 0 8 2zM8 10.7V5.7M5.6 8.1 8 5.6l2.4 2.5',
     updateInstall: 'M3 9.5v3c0 .6.45 1 1 1h8c.55 0 1-.4 1-1v-3M8 2.6v6.2M5.4 6.4 8 9l2.6-2.6',
+    perf: 'M2.6 12.2a5.4 5.4 0 1 1 10.8 0M8 12.2 10.5 7.4',
     views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8'
 };
 
@@ -1667,6 +1692,9 @@ function PaneFrame(props) {
         onPick: (id)=>surface.onBind(leaf.id, id),
         views: surface.state.views,
         currentViewId: surface.state.currentViewId
+    }) : surface.state.perfMode === true && !focused ? h(MvParkedPane, {
+        title,
+        onResume: ()=>surface.onFocus(leaf.id)
     }) : h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,
@@ -1680,6 +1708,19 @@ const MvPaneHost = React.memo(function MvPaneHost(props) {
         renderSlot: props.renderSlot
     });
 }, (previous, next)=>previous.sessionId === next.sessionId && previous.SessionProvider === next.SessionProvider && previous.renderSlot === next.renderSlot);
+function MvParkedPane(props) {
+    const { title, onResume } = props;
+    return h('button', {
+        type: 'button',
+        className: 'mv-parked',
+        onClick: onResume,
+        title: T('parkedHint')
+    }, h('span', {
+        className: 'mv-parked-title'
+    }, title), h('span', {
+        className: 'mv-parked-note'
+    }, T('parkedTitle')));
+}
 function renderMvNode(node, surface) {
     if (node.kind === 'leaf') return h(PaneFrame, {
         key: node.id,
@@ -1805,6 +1846,20 @@ function MvUpdateDialog(props) {
         role: 'dialog',
         'aria-label': T('updateCheck')
     }, body, actions));
+}
+function MvPerfButton() {
+    const state = useMvState();
+    const on = state.perfMode === true;
+    return h('button', {
+        type: 'button',
+        className: 'mv-icon mv-perf',
+        'data-active': on ? 'true' : 'false',
+        title: on ? T('perfModeOn') : T('perfModeOff'),
+        'aria-label': T('perfMode'),
+        onClick: ()=>mvTogglePerfMode()
+    }, h(MvGlyph, {
+        path: MV_ICON.perf
+    }));
 }
 function MvViewsButton(props) {
     const { views, currentKey } = props;
@@ -2059,7 +2114,7 @@ function MultiviewStage(props) {
         className: 'mv-chip',
         'data-active': 'true',
         onClick: mvRestore
-    }, T('restore')), h(MvViewsButton, {
+    }, T('restore')), h(MvPerfButton, null), h(MvViewsButton, {
         views: state.views ?? [],
         currentKey: mvViewKey(state.layout)
     }), h(MvUpdateButton, null), h('span', {

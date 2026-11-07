@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.10'
+const MV_PLUGIN_VERSION = '0.1.11'
 
 const MV_ZH = {
   panel: '分屏',
@@ -34,6 +34,11 @@ const MV_ZH = {
   waiting: '等待你处理',
   unread: '有新结果',
   views: '视图',
+  perfMode: '性能模式',
+  perfModeOn: '性能模式已开启：只有聚焦的那一格实时渲染',
+  perfModeOff: '性能模式已关闭：每一格都实时渲染',
+  parkedTitle: '实时渲染已暂停',
+  parkedHint: '性能模式下非聚焦格不渲染；点击这一格恢复',
   viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
   viewsCurrent: '当前分屏',
   viewsDelete: '删除视图',
@@ -80,6 +85,11 @@ const MV_EN = {
   waiting: 'Waiting for you',
   unread: 'New result',
   views: 'Views',
+  perfMode: 'Performance mode',
+  perfModeOn: 'Performance mode on: only the focused pane renders live',
+  perfModeOff: 'Performance mode off: every pane renders live',
+  parkedTitle: 'Live rendering paused',
+  parkedHint: 'Performance mode parks unfocused panes; click this pane to resume',
   viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
   viewsCurrent: 'Current split',
   viewsDelete: 'Delete view',
