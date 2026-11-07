@@ -455,7 +455,7 @@ function MvUpdateButton() {
           if (update.available !== true) void mvUpdateCheck(true)
         },
       },
-      h(MvGlyph, { path: MV_ICON.refresh }),
+      h(MvGlyph, { path: update.available === true ? MV_ICON.updateInstall : MV_ICON.updateCheck }),
     ),
     open ? h(MvUpdateDialog, { update, caption, onClose: () => setOpen(false) }) : null,
   )
