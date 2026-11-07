@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.9';
+const MV_PLUGIN_VERSION = '0.1.10';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',

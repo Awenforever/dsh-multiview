@@ -1,8 +1,11 @@
 name: publish
 
-# Publishes to npm when a version tag is pushed: `git tag v0.1.9 && git push origin v0.1.9`.
+# Publishes to npm when a version tag is pushed: `git tag v0.1.10 && git push origin v0.1.10`.
 # Authentication is npm Trusted Publishing (OIDC): the package trusts this
 # repository and this workflow file, so no token or secret is stored anywhere.
+# setup-node is intentionally used WITHOUT `registry-url`: that option writes an
+# .npmrc with `_authToken=${NODE_AUTH_TOKEN}`, and an unresolvable token line
+# makes npm attempt token auth instead of the OIDC exchange.
 on:
   push:
     tags:
@@ -21,7 +24,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+
+      - name: Toolchain
+        run: |
+          node -v
+          npm -v
+          echo "registry=$(npm config get registry)"
+          echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
 
       - name: Build and verify
         run: |
