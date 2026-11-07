@@ -8,7 +8,7 @@
 
 ## Install
 
-Add the bundle from **Plugins → Add** in DSH Desktop (or let a maintainer run `plugin_manager install_bundle`), then **quit and reopen** DeepSeek Harness so the client bundle loads again.
+Install from npm with `dsh plugin add dsh-multiview`, or search for it under **Plugins → Add** in DSH Desktop (a maintainer can also run `plugin_manager install_bundle`), then **quit and reopen** DeepSeek Harness so the client bundle loads again.
 
 A "Split" icon appears in the left panel list; click it to turn the central column into the stage, click again to return to the native conversation.
 

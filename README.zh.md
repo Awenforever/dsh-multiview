@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## 安装
 
-在 DSH Desktop 的 **插件 → 添加** 里安装本 bundle（或由维护者用 `plugin_manager install_bundle`），然后**完全退出并重新打开** DeepSeek Harness，让客户端 bundle 重新加载。
+已发布到 npm：`dsh plugin add dsh-multiview`，或在 DSH Desktop 的 **插件 → 添加** 里搜索安装（维护者也可用 `plugin_manager install_bundle`），然后**完全退出并重新打开** DeepSeek Harness，让客户端 bundle 重新加载。
 
 装好后左侧面板列表多一个「分屏」图标；点它把中央列切换为分屏舞台，再点一次回到原生会话。
 
