@@ -92,6 +92,9 @@ dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
 
 预 1.0：接口稳定到可以日常使用，但小版本里仍可能出现小范围破坏性变更，每一处都记在 [CHANGELOG.md](CHANGELOG.md)。发布由 CI 从 tag 触发并带 npm provenance，所以 npm 上的包就是本仓库构建出的那一个。
 
+客户端只会发两类网络请求：插件市场的同源 API，以及**仅用于版本发现**的 `registry.npmjs.org/dsh-multiview/latest`
+公共读取（不带凭据、不带 referrer）。安装仍然走市场。`scripts/check.mjs` 会守住这份清单。
+
 `engines.dsh` 接受整个 `0.2.x`。构建在 `0.2.1-rc.5` 与 `0.2.2-rc.1` 上验证过；其他版本会在顶栏 tooltip 里注明"尚未验证"，而不是假装验证过。
 
 - Bug 与需求：[issues](https://github.com/Awenforever/dsh-multiview/issues)（模板会问最要紧的两件事：插件版本、宿主版本）。

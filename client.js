@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.17';
+const MV_PLUGIN_VERSION = '0.1.18';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -842,6 +842,9 @@ const MV_POLL_LIMIT = 200;
 const MV_REQUEST_TIMEOUT = 20000;
 const MV_CHECK_TIMEOUT = 30000;
 const MV_UPDATE_STALE = 10 * 60 * 1000;
+const MV_CAPABILITY_TIMEOUT = 5000;
+const MV_REGISTRY_LATEST = 'https://registry.npmjs.org/dsh-multiview/latest';
+const MV_REGISTRY_TIMEOUT = 8000;
 let mvUpdateState = {
     status: 'idle',
     installed: MV_PLUGIN_VERSION,
@@ -958,6 +961,28 @@ function mvUpdateDescribe(error, timeoutMs, label) {
     }
     return message;
 }
+async function mvUpdateRegistryLatest() {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller === null ? 0 : setTimeout(()=>controller.abort(), MV_REGISTRY_TIMEOUT);
+    try {
+        const response = await fetch(MV_REGISTRY_LATEST, {
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+            headers: {
+                accept: 'application/json'
+            },
+            signal: controller === null ? undefined : controller.signal
+        });
+        if (!response.ok) return null;
+        const answer = await response.json();
+        const version = typeof answer?.version === 'string' ? answer.version : '';
+        return version === '' ? null : version;
+    } catch (error) {
+        return null;
+    } finally{
+        if (timer !== 0) clearTimeout(timer);
+    }
+}
 async function mvUpdatePost(url, body) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller === null ? 0 : setTimeout(()=>controller.abort(), MV_REQUEST_TIMEOUT);
@@ -991,60 +1016,41 @@ async function mvUpdateCheck(force) {
     });
     let installed = MV_PLUGIN_VERSION;
     let capabilities = null;
-    let marketError = null;
     try {
-        capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CHECK_TIMEOUT);
+        capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CAPABILITY_TIMEOUT);
     } catch (error) {
         capabilities = null;
-        marketError = mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'));
     }
     const marketReady = capabilities !== null && capabilities.schema === 'dsh-market/update-api/v1';
     const endpoints = marketReady ? capabilities.endpoints ?? {} : {};
-    if (!marketReady) {
-        const failures = mvUpdateState.failures + 1;
-        const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
-        mvUpdateCommit({
-            status: 'unsupported',
-            available: false,
-            latest: null,
-            failures,
-            checkedAt: now,
-            nextAt: now + delay,
-            error: marketError
-        });
-        return;
-    }
-    let latest = null;
-    let source = null;
-    try {
-        const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates';
-        const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview', MV_CHECK_TIMEOUT);
-        const pkg = answer?.package ?? null;
-        if (typeof pkg?.installedVersion === 'string') installed = pkg.installedVersion;
-        if (typeof pkg?.latestVersion === 'string') latest = pkg.latestVersion;
-        if (typeof pkg?.source === 'string') source = pkg.source;
-    } catch (error) {
-        const failures = mvUpdateState.failures + 1;
-        const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
-        mvUpdateCommit({
-            status: 'error',
-            available: false,
-            latest: null,
-            failures,
-            checkedAt: now,
-            nextAt: now + delay,
-            error: mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'))
-        });
-        return;
+    const updatesPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates';
+    let latest = await mvUpdateRegistryLatest();
+    let source = latest === null ? null : 'npm';
+    let marketAnswered = false;
+    let failure = null;
+    if (latest === null) {
+        try {
+            const answer = await mvUpdateGet(updatesPath + '?name=dsh-multiview', MV_CHECK_TIMEOUT);
+            const pkg = answer?.package ?? null;
+            marketAnswered = pkg !== null && pkg !== undefined;
+            if (typeof pkg?.installedVersion === 'string') installed = pkg.installedVersion;
+            if (typeof pkg?.latestVersion === 'string') latest = pkg.latestVersion;
+            if (latest !== null) source = typeof pkg?.source === 'string' ? pkg.source : 'market';
+        } catch (error) {
+            failure = mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'));
+        }
     }
     if (latest === null) {
+        const failures = mvUpdateState.failures + 1;
+        const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
         mvUpdateCommit({
-            status: 'error',
+            status: marketReady ? 'error' : 'unsupported',
             available: false,
             latest: null,
+            failures,
             checkedAt: now,
-            nextAt: now + MV_BACKOFF_BASE,
-            error: T('updateNoVersion')
+            nextAt: now + delay,
+            error: failure ?? T('updateNoVersion')
         });
         return;
     }
@@ -1055,13 +1061,13 @@ async function mvUpdateCheck(force) {
         latest,
         source,
         available,
-        canAutoInstall: endpoints.updates !== undefined,
+        canAutoInstall: marketReady && endpoints.updates !== undefined,
         localOnly: typeof source === 'string' && /^link|local|file/i.test(source),
         checkedAt: now,
         nextAt: now + MV_CHECK_INTERVAL,
         failures: 0,
         error: null,
-        restartSupported: capabilities.restart?.supported === true
+        restartSupported: marketReady ? capabilities.restart?.supported === true : false
     });
 }
 async function mvUpdateInstall() {

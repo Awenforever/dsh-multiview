@@ -47,9 +47,17 @@ ok(/return \{ inject: MV_INJECT, apply \}/.test(client), 'client.js must export 
 ok(!/\beval\s*\(/.test(client), 'client.js must not call eval')
 ok(!/new Function\s*\(/.test(client), 'client.js must not build functions from strings')
 ok(!/XMLHttpRequest/.test(client), 'client.js must not perform network requests')
-ok(!/https?:\/\//.test(client.replace(/https?:\/\/[^\s'"]*schema[^\s'"]*/g, '')), 'client.js must not embed endpoints')
+/* Exactly one external endpoint is sanctioned: the public registry, used only to
+   learn the latest published version. Everything else must stay same-origin on
+   the market API. The market's own package query was measured at 40-75 s and
+   returned latestVersion: null, which made every update check fail. */
+const ALLOWED_EXTERNAL = 'https://registry.npmjs.org/dsh-multiview/latest'
+const withoutAllowed = client.split(ALLOWED_EXTERNAL).join('')
+ok(!/https?:\/\//.test(withoutAllowed.replace(/https?:\/\/[^\s'"]*schema[^\s'"]*/g, '')), 'client.js must not embed endpoints other than the registry fallback')
+ok(client.includes(ALLOWED_EXTERNAL), 'the registry fallback endpoint must be present')
+ok((client.match(/registry\.npmjs\.org/g) ?? []).length === 1, 'client.js must reference the registry exactly once')
 const fetchCalls = (client.match(/\bfetch\(/g) ?? []).length
-ok(fetchCalls <= 2, `client.js must only talk to the market API (found ${fetchCalls} fetch calls)`)
+ok(fetchCalls <= 3, `client.js may only talk to the market API and the registry (found ${fetchCalls} fetch calls)`)
 ok(
   fetchCalls === 0 || client.includes('/dsh-market/api/v1/capabilities'),
   'network access must stay on the plugin market same-origin API',
@@ -58,7 +66,6 @@ ok(
   client.includes(`const MV_PLUGIN_VERSION = '${pkg.version}'`),
   'client.js version constant must equal package.json version',
 )
-ok(!/https?:\/\//.test(client.replace(/https?:\/\/[^\s'"]*schema[^\s'"]*/g, '')), 'client.js must not embed endpoints')
 ok(clientBytes < 160 * 1024, `client.js is ${clientBytes} bytes, over the 160 KiB budget`)
 ok(host.includes('export function apply'), 'index.js must export a Host apply')
 ok(readFileSync(join(ROOT, 'cordis.patch.yml'), 'utf8').includes("name: 'dsh-multiview'"), 'patch row must name the package')

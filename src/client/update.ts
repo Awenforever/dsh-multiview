@@ -28,6 +28,20 @@ const MV_REQUEST_TIMEOUT = 20000
 const MV_CHECK_TIMEOUT = 30000
 /** A cached result older than this is refreshed when the dialog is opened. */
 const MV_UPDATE_STALE = 10 * 60 * 1000
+/** Capabilities is a local read; it has no excuse to be slow. */
+const MV_CAPABILITY_TIMEOUT = 5000
+/**
+ * The public registry, used for version discovery only.
+ *
+ * This is the one deliberate non-market endpoint: the market's own package query
+ * has been observed taking 40–75 s and returning `latestVersion: null` (it cannot
+ * resolve npm from its host), which made every update check fail. The registry
+ * answers in milliseconds and sends `Access-Control-Allow-Origin: *`, so a
+ * credentialed-free GET is enough. Installs still go through the market.
+ */
+const MV_REGISTRY_LATEST = 'https://registry.npmjs.org/dsh-multiview/latest'
+/** Discovery budget: the registry answers in milliseconds, so waiting longer is pointless. */
+const MV_REGISTRY_TIMEOUT = 8000
 
 let mvUpdateState: any = {
   status: 'idle',
@@ -166,8 +180,33 @@ function mvUpdateDescribe(error: any, timeoutMs: number, label: string): string 
   return message
 }
 
-/** Same-origin JSON POST with a bounded wait. */
-async function mvUpdatePost(url: string, body: any): Promise<any> {
+/**
+ * Latest published version, straight from the public registry.
+ * @returns the version, or null when the registry cannot be reached.
+ */
+async function mvUpdateRegistryLatest(): Promise<string | null> {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  const timer = controller === null ? 0 : setTimeout(() => controller.abort(), MV_REGISTRY_TIMEOUT)
+  try {
+    const response = await fetch(MV_REGISTRY_LATEST, {
+      /* No cookies and no referrer: this is a public read of a public package. */
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      headers: { accept: 'application/json' },
+      signal: controller === null ? undefined : controller.signal,
+    })
+    if (!response.ok) return null
+    const answer = await response.json()
+    const version = typeof answer?.version === 'string' ? answer.version : ''
+    return version === '' ? null : version
+  } catch (error) {
+    return null
+  } finally {
+    if (timer !== 0) clearTimeout(timer)
+  }
+}
+
+/** Same-origin JSON POST with a bounded wait. */async function mvUpdatePost(url: string, body: any): Promise<any> {
   const controller = typeof AbortController === 'function' ? new AbortController() : null
   const timer = controller === null ? 0 : setTimeout(() => controller.abort(), MV_REQUEST_TIMEOUT)
   try {
@@ -187,6 +226,10 @@ async function mvUpdatePost(url: string, body: any): Promise<any> {
 
 /**
  * Ask the market what it knows about this package.
+ *
+ * Version discovery prefers the public registry: it answers in milliseconds and
+ * is the authority for "what is the latest published version". The market stays
+ * the installer, and remains the fallback when the registry cannot be reached.
  * @param force - ignore the 24h schedule and the backoff window.
  */
 async function mvUpdateCheck(force?: boolean): Promise<void> {
@@ -198,67 +241,48 @@ async function mvUpdateCheck(force?: boolean): Promise<void> {
   if (mvUpdateState.status === 'checking' || mvUpdateState.status === 'installing') return
   mvUpdateCommit({ status: 'checking', error: null })
 
-  /* 1. Installed version, from the market when it answers. */
+  /* 1. Market capabilities: decides whether the install button can exist at all. */
   let installed = MV_PLUGIN_VERSION
   let capabilities: any = null
-  let marketError: string | null = null
   try {
-    capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CHECK_TIMEOUT)
+    capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CAPABILITY_TIMEOUT)
   } catch (error) {
     capabilities = null
-    marketError = mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'))
   }
   const marketReady = capabilities !== null && capabilities.schema === 'dsh-market/update-api/v1'
   const endpoints = marketReady ? capabilities.endpoints ?? {} : {}
+  const updatesPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates'
 
-  if (!marketReady) {
-    const failures = mvUpdateState.failures + 1
-    const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX)
-    mvUpdateCommit({
-      status: 'unsupported',
-      /* A failed check must not leave last night's "update available" on screen. */
-      available: false,
-      latest: null,
-      failures,
-      checkedAt: now,
-      nextAt: now + delay,
-      error: marketError,
-    })
-    return
-  }
+  /* 2. Latest version: registry first, market second. */
+  let latest: string | null = await mvUpdateRegistryLatest()
+  let source: string | null = latest === null ? null : 'npm'
+  let marketAnswered = false
+  let failure: string | null = null
 
-  let latest: string | null = null
-  let source: string | null = null
-  try {
-    const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates'
-    const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview', MV_CHECK_TIMEOUT)
-    const pkg = answer?.package ?? null
-    if (typeof pkg?.installedVersion === 'string') installed = pkg.installedVersion
-    if (typeof pkg?.latestVersion === 'string') latest = pkg.latestVersion
-    if (typeof pkg?.source === 'string') source = pkg.source
-  } catch (error) {
-    const failures = mvUpdateState.failures + 1
-    const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX)
-    mvUpdateCommit({
-      status: 'error',
-      available: false,
-      latest: null,
-      failures,
-      checkedAt: now,
-      nextAt: now + delay,
-      error: mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket')),
-    })
-    return
+  if (latest === null) {
+    try {
+      const answer = await mvUpdateGet(updatesPath + '?name=dsh-multiview', MV_CHECK_TIMEOUT)
+      const pkg = answer?.package ?? null
+      marketAnswered = pkg !== null && pkg !== undefined
+      if (typeof pkg?.installedVersion === 'string') installed = pkg.installedVersion
+      if (typeof pkg?.latestVersion === 'string') latest = pkg.latestVersion
+      if (latest !== null) source = typeof pkg?.source === 'string' ? pkg.source : 'market'
+    } catch (error) {
+      failure = mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'))
+    }
   }
 
   if (latest === null) {
+    const failures = mvUpdateState.failures + 1
+    const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX)
     mvUpdateCommit({
-      status: 'error',
+      status: marketReady ? 'error' : 'unsupported',
       available: false,
       latest: null,
+      failures,
       checkedAt: now,
-      nextAt: now + MV_BACKOFF_BASE,
-      error: T('updateNoVersion'),
+      nextAt: now + delay,
+      error: failure ?? T('updateNoVersion'),
     })
     return
   }
@@ -270,13 +294,14 @@ async function mvUpdateCheck(force?: boolean): Promise<void> {
     latest,
     source,
     available,
-    canAutoInstall: endpoints.updates !== undefined,
+    /* Install needs the market; a registry-only answer keeps the manual hint. */
+    canAutoInstall: marketReady && endpoints.updates !== undefined,
     localOnly: typeof source === 'string' && /^link|local|file/i.test(source),
     checkedAt: now,
     nextAt: now + MV_CHECK_INTERVAL,
     failures: 0,
     error: null,
-    restartSupported: capabilities.restart?.supported === true,
+    restartSupported: marketReady ? capabilities.restart?.supported === true : false,
   })
 }
 

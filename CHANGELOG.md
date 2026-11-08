@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.18 — 2026-11-08
+
+### 修复
+
+- **更新检查改为「registry 优先、市场兜底」**：版本发现直接问 `registry.npmjs.org/dsh-multiview/latest`（通常几百毫秒），失败才退回市场接口。触发原因：市场插件的 `/dsh-market/api/v1/updates?name=...` 实测要 40–75 秒，且返回 `"latestVersion": null`（它自己解析不了 npm），导致每次检查都必然失败。
+- 安装路径不变：仍然走市场；若市场不可用，弹窗给出 `dsh plugin add dsh-multiview` 或插件页的手动升级办法，不再摆出一个注定失败的按钮。
+- 没有插件市场的 profile 里，检查也能正常工作（只在需要安装时才提示手动）。
+
+### 变更
+
+- `scripts/check.mjs` 放开**唯一一个**外部端点：npm registry（`registry.npmjs.org/dsh-multiview/latest`），并断言它只出现一次、其余外部 URL 仍然禁止、fetch 调用上限从 2 提到 3。README 中同步披露这条外部请求（`credentials: omit`、`referrerPolicy: no-referrer`，只读公共包元数据）。
+
 ## 0.1.17 — 2026-11-08
 
 ### 修复

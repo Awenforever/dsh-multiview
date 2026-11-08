@@ -92,6 +92,10 @@ Pre-1.0: the surface is stable enough to use daily, but small breaking changes c
 bump, and every one of them is listed in [CHANGELOG.md](CHANGELOG.md). Versions are published from a
 tag by CI with npm provenance, so what npm serves is exactly what this repository built.
 
+The only network requests the client makes are the plugin market's same-origin API and, for version
+discovery only, a public read of `registry.npmjs.org/dsh-multiview/latest` (no credentials, no
+referrer). Installs still go through the market. `scripts/check.mjs` enforces that list.
+
 `engines.dsh` accepts the whole `0.2.x` line. Builds are verified against `0.2.1-rc.5` and
 `0.2.2-rc.1`; on any other version the toolbar tooltip says so instead of pretending it was tested.
 
