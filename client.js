@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.18';
+const MV_PLUGIN_VERSION = '0.1.19';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1229,6 +1229,10 @@ const MV_CSS = `
 .mv-dialog-button{height:28px;padding:0 12px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}
 .mv-dialog-button:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-dialog-button--primary{border-color:transparent;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-bg-base)}
+.mv-dialog-button--primary:hover{background:var(--dsw-alias-state-business-primary);filter:brightness(0.92)}
+.mv-dialog-button:disabled{opacity:.55;cursor:default}
+.mv-dialog-button--primary:disabled:hover{filter:none}
+.mv-dialog-button:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .mv-picker-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mv-picker-owner{flex:none;max-width:45%;padding:0 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mv-picker-item[data-owned="true"]{opacity:0.45;cursor:not-allowed}
