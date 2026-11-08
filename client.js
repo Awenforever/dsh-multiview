@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.16';
+const MV_PLUGIN_VERSION = '0.1.17';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -51,6 +51,20 @@ const MV_ZH = {
     updateUnsupported: '未检测到插件市场，无法自动更新',
     updateLocal: '当前为本地链接安装，自动更新不可用',
     updateIdle: '尚未检查更新',
+    updateTitleChecking: '检查更新',
+    updateTitleAvailable: '发现新版本 {version}',
+    updateTitleIdle: '已是最新版本',
+    updateTitleFailed: '检查更新失败',
+    updateTitleInstalling: '正在更新',
+    updateConfirmHint: '确认后会通过插件市场下载并安装。',
+    updateLater: '稍后',
+    updateClose: '关闭',
+    updateRetry: '重试',
+    updateTimeout: '{label}响应超时（{seconds} 秒）',
+    updateUnreachable: '无法连接{label}',
+    updateManual: '插件市场暂不可用，请用 dsh plugin add dsh-multiview 或插件页升级。',
+    updateNoVersion: '插件市场未返回版本号',
+    serviceMarket: '插件市场',
     cancel: '取消',
     close: '关闭',
     shortcutFocusPrev: '聚焦上一格',
@@ -97,6 +111,20 @@ const MV_EN = {
     updateUnsupported: 'No plugin market detected; automatic updates unavailable',
     updateLocal: 'Installed from a local link; automatic updates unavailable',
     updateIdle: 'Not checked yet',
+    updateTitleChecking: 'Check for updates',
+    updateTitleAvailable: 'Version {version} is available',
+    updateTitleIdle: 'Up to date',
+    updateTitleFailed: 'Update check failed',
+    updateTitleInstalling: 'Updating',
+    updateConfirmHint: 'This downloads and installs through the plugin market.',
+    updateLater: 'Later',
+    updateClose: 'Close',
+    updateRetry: 'Retry',
+    updateTimeout: '{label} timed out after {seconds}s',
+    updateUnreachable: 'Could not reach {label}',
+    updateManual: 'The plugin market is unavailable — update with dsh plugin add dsh-multiview, or from the Plugins page.',
+    updateNoVersion: 'The plugin market returned no version',
+    serviceMarket: 'the plugin market',
     cancel: 'Cancel',
     close: 'Close',
     shortcutFocusPrev: 'Focus previous pane',
@@ -812,6 +840,8 @@ const MV_BACKOFF_MAX = 12 * 60 * 60 * 1000;
 const MV_POLL_INTERVAL = 1500;
 const MV_POLL_LIMIT = 200;
 const MV_REQUEST_TIMEOUT = 20000;
+const MV_CHECK_TIMEOUT = 30000;
+const MV_UPDATE_STALE = 10 * 60 * 1000;
 let mvUpdateState = {
     status: 'idle',
     installed: MV_PLUGIN_VERSION,
@@ -895,12 +925,12 @@ function mvVersionGt(left, right) {
     }
     return false;
 }
-async function mvUpdateGet(url) {
+async function mvUpdateGet(url, timeoutMs = MV_REQUEST_TIMEOUT) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = controller === null ? 0 : setTimeout(()=>controller.abort(), MV_REQUEST_TIMEOUT);
+    const timer = controller === null ? 0 : setTimeout(()=>controller.abort(), timeoutMs);
     try {
         const response = await fetch(url, {
-            credentials: 'same-origin',
+            credentials: timeoutMs === MV_REQUEST_TIMEOUT ? 'same-origin' : 'omit',
             headers: {
                 accept: 'application/json'
             },
@@ -911,6 +941,22 @@ async function mvUpdateGet(url) {
     } finally{
         if (timer !== 0) clearTimeout(timer);
     }
+}
+function mvUpdateDescribe(error, timeoutMs, label) {
+    const name = error === null || error === undefined ? '' : String(error.name ?? '');
+    const message = error instanceof Error ? error.message : String(error);
+    if (name === 'AbortError' || /aborted/i.test(message)) {
+        return mvFormat(T('updateTimeout'), {
+            label,
+            seconds: String(Math.round(timeoutMs / 1000))
+        });
+    }
+    if (error instanceof TypeError || /fetch|network|failed to fetch/i.test(message)) {
+        return mvFormat(T('updateUnreachable'), {
+            label
+        });
+    }
+    return message;
 }
 async function mvUpdatePost(url, body) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -943,54 +989,80 @@ async function mvUpdateCheck(force) {
         status: 'checking',
         error: null
     });
+    let installed = MV_PLUGIN_VERSION;
+    let capabilities = null;
+    let marketError = null;
     try {
-        let capabilities = null;
-        try {
-            capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities');
-        } catch (error) {
-            capabilities = null;
-        }
-        if (capabilities === null || capabilities.schema !== 'dsh-market/update-api/v1') {
-            mvUpdateCommit({
-                status: 'unsupported',
-                checkedAt: now,
-                nextAt: now + MV_CHECK_INTERVAL,
-                failures: 0
-            });
-            return;
-        }
-        const endpoints = capabilities.endpoints ?? {};
-        const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates';
-        const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview');
-        const pkg = answer?.package ?? null;
-        const installed = typeof pkg?.installedVersion === 'string' ? pkg.installedVersion : MV_PLUGIN_VERSION;
-        const latest = typeof pkg?.latestVersion === 'string' ? pkg.latestVersion : null;
-        const source = typeof pkg?.source === 'string' ? pkg.source : null;
-        const available = pkg?.updateAvailable === true || latest !== null && mvVersionGt(latest, installed);
+        capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CHECK_TIMEOUT);
+    } catch (error) {
+        capabilities = null;
+        marketError = mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'));
+    }
+    const marketReady = capabilities !== null && capabilities.schema === 'dsh-market/update-api/v1';
+    const endpoints = marketReady ? capabilities.endpoints ?? {} : {};
+    if (!marketReady) {
+        const failures = mvUpdateState.failures + 1;
+        const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
         mvUpdateCommit({
-            status: available ? 'available' : 'idle',
-            installed,
-            latest,
-            source,
-            available,
-            localOnly: source !== null && /link|local|file/i.test(source),
+            status: 'unsupported',
+            available: false,
+            latest: null,
+            failures,
             checkedAt: now,
-            nextAt: now + MV_CHECK_INTERVAL,
-            failures: 0,
-            error: null,
-            restartSupported: capabilities?.restart?.supported === true
+            nextAt: now + delay,
+            error: marketError
         });
+        return;
+    }
+    let latest = null;
+    let source = null;
+    try {
+        const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates';
+        const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview', MV_CHECK_TIMEOUT);
+        const pkg = answer?.package ?? null;
+        if (typeof pkg?.installedVersion === 'string') installed = pkg.installedVersion;
+        if (typeof pkg?.latestVersion === 'string') latest = pkg.latestVersion;
+        if (typeof pkg?.source === 'string') source = pkg.source;
     } catch (error) {
         const failures = mvUpdateState.failures + 1;
         const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
         mvUpdateCommit({
             status: 'error',
+            available: false,
+            latest: null,
             failures,
             checkedAt: now,
             nextAt: now + delay,
-            error: error instanceof Error ? error.message : String(error)
+            error: mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'))
         });
+        return;
     }
+    if (latest === null) {
+        mvUpdateCommit({
+            status: 'error',
+            available: false,
+            latest: null,
+            checkedAt: now,
+            nextAt: now + MV_BACKOFF_BASE,
+            error: T('updateNoVersion')
+        });
+        return;
+    }
+    const available = mvVersionGt(latest, installed);
+    mvUpdateCommit({
+        status: available ? 'available' : 'idle',
+        installed,
+        latest,
+        source,
+        available,
+        canAutoInstall: endpoints.updates !== undefined,
+        localOnly: typeof source === 'string' && /^link|local|file/i.test(source),
+        checkedAt: now,
+        nextAt: now + MV_CHECK_INTERVAL,
+        failures: 0,
+        error: null,
+        restartSupported: capabilities.restart?.supported === true
+    });
 }
 async function mvUpdateInstall() {
     if (mvUpdateState.status === 'installing') return;
@@ -1755,9 +1827,7 @@ function mvUpdateCaption(update) {
     if (update.status === 'installing') return T('updateInstalling');
     if (update.status === 'done') return T('updateDone');
     if (update.status === 'unsupported') return T('updateUnsupported');
-    if (update.status === 'error') return mvFormat(T('updateFailed'), {
-        message: update.error ?? ''
-    });
+    if (update.status === 'error') return update.error ?? T('updateTitleFailed');
     if (update.available === true) return mvFormat(T('updateAvailable'), {
         version: update.latest ?? ''
     });
@@ -1780,7 +1850,8 @@ function MvUpdateButton() {
         'aria-label': T('updateCheck'),
         onClick: ()=>{
             setOpen(true);
-            if (update.available !== true) void mvUpdateCheck(true);
+            const stale = update.checkedAt === 0 || Date.now() - update.checkedAt > MV_UPDATE_STALE || update.status === 'error' || update.status === 'unsupported';
+            if (update.available !== true || stale) void mvUpdateCheck(true);
         }
     }, h(MvGlyph, {
         path: update.available === true ? MV_ICON.updateInstall : MV_ICON.updateCheck
@@ -1793,33 +1864,43 @@ function MvUpdateButton() {
 function MvUpdateDialog(props) {
     const { update, caption, onClose } = props;
     const busy = update.status === 'installing';
-    const canInstall = update.available === true && !busy && update.localOnly !== true;
+    const checking = update.status === 'checking';
+    const failed = update.status === 'error';
+    const canInstall = update.available === true && !busy && update.canAutoInstall === true && update.localOnly !== true;
+    const title = update.status === 'available' ? mvFormat(T('updateTitleAvailable'), {
+        version: update.latest ?? ''
+    }) : checking ? T('updateTitleChecking') : failed ? T('updateTitleFailed') : busy ? T('updateTitleInstalling') : update.checkedAt > 0 ? T('updateTitleIdle') : T('updateTitleChecking');
     const body = h('div', {
         className: 'mv-dialog-body'
     }, h('div', {
         className: 'mv-dialog-title'
-    }, T('updateCheck')), h('div', {
+    }, title), h('div', {
         className: 'mv-dialog-text'
-    }, caption), update.status === 'installing' && update.operationState !== null ? h('div', {
+    }, caption), canInstall ? h('div', {
+        className: 'mv-dialog-text mv-dialog-hint'
+    }, T('updateConfirmHint')) : null, update.available === true && update.canAutoInstall !== true || failed || update.status === 'unsupported' ? h('div', {
+        className: 'mv-dialog-text'
+    }, T('updateManual')) : null, busy && update.operationState !== null ? h('div', {
         className: 'mv-dialog-text'
     }, String(update.operationState)) : null, update.status === 'done' && update.restartRequired === true && update.restartSupported === true ? h('div', {
         className: 'mv-dialog-text'
     }, T('updateDone')) : null);
     const actions = h('div', {
         className: 'mv-dialog-actions'
-    }, h('button', {
+    }, canInstall ? h('button', {
         type: 'button',
         className: 'mv-dialog-button',
         onClick: onClose
-    }, T('cancel')), canInstall ? h('button', {
-        type: 'button',
-        className: 'mv-dialog-button mv-dialog-button--primary',
-        onClick: ()=>void mvUpdateInstall()
-    }, T('updateInstall')) : update.available !== true && update.status !== 'installing' ? h('button', {
+    }, T('updateLater')) : null, failed ? h('button', {
         type: 'button',
         className: 'mv-dialog-button',
         onClick: ()=>void mvUpdateCheck(true)
-    }, T('updateCheck')) : null);
+    }, T('updateRetry')) : null, h('button', {
+        type: 'button',
+        className: 'mv-dialog-button mv-dialog-button--primary',
+        disabled: busy,
+        onClick: canInstall ? ()=>void mvUpdateInstall() : onClose
+    }, canInstall ? T('updateInstall') : T('updateClose')));
     return h('div', {
         className: 'mv-dialog-backdrop',
         onClick: (event)=>{
@@ -1828,7 +1909,7 @@ function MvUpdateDialog(props) {
     }, h('div', {
         className: 'mv-dialog',
         role: 'dialog',
-        'aria-label': T('updateCheck')
+        'aria-label': title
     }, body, actions));
 }
 function MvViewsButton(props) {

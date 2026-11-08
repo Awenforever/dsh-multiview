@@ -441,7 +441,7 @@ function mvUpdateCaption(update: any): string {
   if (update.status === 'installing') return T('updateInstalling')
   if (update.status === 'done') return T('updateDone')
   if (update.status === 'unsupported') return T('updateUnsupported')
-  if (update.status === 'error') return mvFormat(T('updateFailed'), { message: update.error ?? '' })
+  if (update.status === 'error') return update.error ?? T('updateTitleFailed')
   if (update.available === true) return mvFormat(T('updateAvailable'), { version: update.latest ?? '' })
   if (update.localOnly === true) return T('updateLocal')
   if (update.checkedAt > 0) return mvFormat(T('updateLatest'), { version: update.installed ?? MV_PLUGIN_VERSION })
@@ -467,7 +467,14 @@ function MvUpdateButton() {
         'aria-label': T('updateCheck'),
         onClick: () => {
           setOpen(true)
-          if (update.available !== true) void mvUpdateCheck(true)
+          /* A cached "update available" can be hours old, and a failed check
+             leaves nothing to show; both deserve a fresh answer. */
+          const stale =
+            update.checkedAt === 0 ||
+            Date.now() - update.checkedAt > MV_UPDATE_STALE ||
+            update.status === 'error' ||
+            update.status === 'unsupported'
+          if (update.available !== true || stale) void mvUpdateCheck(true)
         },
       },
       h(MvGlyph, { path: update.available === true ? MV_ICON.updateInstall : MV_ICON.updateCheck }),
@@ -480,44 +487,59 @@ function MvUpdateButton() {
 function MvUpdateDialog(props) {
   const { update, caption, onClose } = props
   const busy = update.status === 'installing'
-  const canInstall = update.available === true && !busy && update.localOnly !== true
+  const checking = update.status === 'checking'
+  const failed = update.status === 'error'
+  const canInstall = update.available === true && !busy && update.canAutoInstall === true && update.localOnly !== true
+
+  /* The dialog opens because the user already asked; a second "check" action in
+     here would only ask them to repeat themselves. */
+  const title =
+    update.status === 'available'
+      ? mvFormat(T('updateTitleAvailable'), { version: update.latest ?? '' })
+      : checking
+        ? T('updateTitleChecking')
+        : failed
+          ? T('updateTitleFailed')
+          : busy
+            ? T('updateTitleInstalling')
+            : update.checkedAt > 0
+              ? T('updateTitleIdle')
+              : T('updateTitleChecking')
+
   const body = h(
     'div',
     { className: 'mv-dialog-body' },
-    h('div', { className: 'mv-dialog-title' }, T('updateCheck')),
+    h('div', { className: 'mv-dialog-title' }, title),
     h('div', { className: 'mv-dialog-text' }, caption),
-    update.status === 'installing' && update.operationState !== null
-      ? h('div', { className: 'mv-dialog-text' }, String(update.operationState))
+    canInstall ? h('div', { className: 'mv-dialog-text mv-dialog-hint' }, T('updateConfirmHint')) : null,
+    (update.available === true && update.canAutoInstall !== true) || failed || update.status === 'unsupported'
+      ? h('div', { className: 'mv-dialog-text' }, T('updateManual'))
       : null,
+    busy && update.operationState !== null ? h('div', { className: 'mv-dialog-text' }, String(update.operationState)) : null,
     update.status === 'done' && update.restartRequired === true && update.restartSupported === true
       ? h('div', { className: 'mv-dialog-text' }, T('updateDone'))
       : null,
   )
+
   const actions = h(
     'div',
     { className: 'mv-dialog-actions' },
-    h('button', { type: 'button', className: 'mv-dialog-button', onClick: onClose }, T('cancel')),
     canInstall
-      ? h(
-          'button',
-          {
-            type: 'button',
-            className: 'mv-dialog-button mv-dialog-button--primary',
-            onClick: () => void mvUpdateInstall(),
-          },
-          T('updateInstall'),
-        )
-      : update.available !== true && update.status !== 'installing'
-        ? h(
-            'button',
-            {
-              type: 'button',
-              className: 'mv-dialog-button',
-              onClick: () => void mvUpdateCheck(true),
-            },
-            T('updateCheck'),
-          )
-        : null,
+      ? h('button', { type: 'button', className: 'mv-dialog-button', onClick: onClose }, T('updateLater'))
+      : null,
+    failed
+      ? h('button', { type: 'button', className: 'mv-dialog-button', onClick: () => void mvUpdateCheck(true) }, T('updateRetry'))
+      : null,
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'mv-dialog-button mv-dialog-button--primary',
+        disabled: busy,
+        onClick: canInstall ? () => void mvUpdateInstall() : onClose,
+      },
+      canInstall ? T('updateInstall') : T('updateClose'),
+    ),
   )
   return h(
     'div',
@@ -527,7 +549,7 @@ function MvUpdateDialog(props) {
         if (event.target === event.currentTarget) onClose()
       },
     },
-    h('div', { className: 'mv-dialog', role: 'dialog', 'aria-label': T('updateCheck') }, body, actions),
+    h('div', { className: 'mv-dialog', role: 'dialog', 'aria-label': title }, body, actions),
   )
 }
 

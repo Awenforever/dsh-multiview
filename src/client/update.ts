@@ -20,6 +20,14 @@ const MV_POLL_INTERVAL = 1500
 const MV_POLL_LIMIT = 200
 /** Upper bound for one market request, so a slow registry cannot hang the bar. */
 const MV_REQUEST_TIMEOUT = 20000
+/**
+ * Version discovery gets a longer budget than installs: the market resolves the
+ * published version by querying the registry, and a cold index has been measured
+ * taking ~23 s. Timing out early here produced a bare "aborted" message.
+ */
+const MV_CHECK_TIMEOUT = 30000
+/** A cached result older than this is refreshed when the dialog is opened. */
+const MV_UPDATE_STALE = 10 * 60 * 1000
 
 let mvUpdateState: any = {
   status: 'idle',
@@ -123,12 +131,12 @@ function mvVersionGt(left: string, right: string): boolean {
 }
 
 /** Same-origin JSON GET with a bounded wait. */
-async function mvUpdateGet(url: string): Promise<any> {
+async function mvUpdateGet(url: string, timeoutMs: number = MV_REQUEST_TIMEOUT): Promise<any> {
   const controller = typeof AbortController === 'function' ? new AbortController() : null
-  const timer = controller === null ? 0 : setTimeout(() => controller.abort(), MV_REQUEST_TIMEOUT)
+  const timer = controller === null ? 0 : setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(url, {
-      credentials: 'same-origin',
+      credentials: timeoutMs === MV_REQUEST_TIMEOUT ? 'same-origin' : 'omit',
       headers: { accept: 'application/json' },
       signal: controller === null ? undefined : controller.signal,
     })
@@ -137,6 +145,25 @@ async function mvUpdateGet(url: string): Promise<any> {
   } finally {
     if (timer !== 0) clearTimeout(timer)
   }
+}
+
+/**
+ * Turn a raw fetch failure into something a person can act on.
+ * @param error - whatever the request threw.
+ * @param timeoutMs - the budget that was in force, for the timeout wording.
+ * @param label - which service failed, for the message.
+ * @returns a short sentence, never a bare DOMException message.
+ */
+function mvUpdateDescribe(error: any, timeoutMs: number, label: string): string {
+  const name = error === null || error === undefined ? '' : String((error as any).name ?? '')
+  const message = error instanceof Error ? error.message : String(error)
+  if (name === 'AbortError' || /aborted/i.test(message)) {
+    return mvFormat(T('updateTimeout'), { label, seconds: String(Math.round(timeoutMs / 1000)) })
+  }
+  if (error instanceof TypeError || /fetch|network|failed to fetch/i.test(message)) {
+    return mvFormat(T('updateUnreachable'), { label })
+  }
+  return message
 }
 
 /** Same-origin JSON POST with a bounded wait. */
@@ -170,49 +197,87 @@ async function mvUpdateCheck(force?: boolean): Promise<void> {
   }
   if (mvUpdateState.status === 'checking' || mvUpdateState.status === 'installing') return
   mvUpdateCommit({ status: 'checking', error: null })
+
+  /* 1. Installed version, from the market when it answers. */
+  let installed = MV_PLUGIN_VERSION
+  let capabilities: any = null
+  let marketError: string | null = null
   try {
-    let capabilities = null
-    try {
-      capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities')
-    } catch (error) {
-      capabilities = null
-    }
-    if (capabilities === null || capabilities.schema !== 'dsh-market/update-api/v1') {
-      mvUpdateCommit({ status: 'unsupported', checkedAt: now, nextAt: now + MV_CHECK_INTERVAL, failures: 0 })
-      return
-    }
-    const endpoints = capabilities.endpoints ?? {}
-    const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates'
-    const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview')
-    const pkg = answer?.package ?? null
-    const installed = typeof pkg?.installedVersion === 'string' ? pkg.installedVersion : MV_PLUGIN_VERSION
-    const latest = typeof pkg?.latestVersion === 'string' ? pkg.latestVersion : null
-    const source = typeof pkg?.source === 'string' ? pkg.source : null
-    const available = pkg?.updateAvailable === true || (latest !== null && mvVersionGt(latest, installed))
+    capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CHECK_TIMEOUT)
+  } catch (error) {
+    capabilities = null
+    marketError = mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket'))
+  }
+  const marketReady = capabilities !== null && capabilities.schema === 'dsh-market/update-api/v1'
+  const endpoints = marketReady ? capabilities.endpoints ?? {} : {}
+
+  if (!marketReady) {
+    const failures = mvUpdateState.failures + 1
+    const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX)
     mvUpdateCommit({
-      status: available ? 'available' : 'idle',
-      installed,
-      latest,
-      source,
-      available,
-      localOnly: source !== null && /link|local|file/i.test(source),
+      status: 'unsupported',
+      /* A failed check must not leave last night's "update available" on screen. */
+      available: false,
+      latest: null,
+      failures,
       checkedAt: now,
-      nextAt: now + MV_CHECK_INTERVAL,
-      failures: 0,
-      error: null,
-      restartSupported: capabilities?.restart?.supported === true,
+      nextAt: now + delay,
+      error: marketError,
     })
+    return
+  }
+
+  let latest: string | null = null
+  let source: string | null = null
+  try {
+    const checkPath = typeof endpoints.updates === 'string' ? endpoints.updates : '/dsh-market/api/v1/updates'
+    const answer = await mvUpdateGet(checkPath + '?name=dsh-multiview', MV_CHECK_TIMEOUT)
+    const pkg = answer?.package ?? null
+    if (typeof pkg?.installedVersion === 'string') installed = pkg.installedVersion
+    if (typeof pkg?.latestVersion === 'string') latest = pkg.latestVersion
+    if (typeof pkg?.source === 'string') source = pkg.source
   } catch (error) {
     const failures = mvUpdateState.failures + 1
     const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX)
     mvUpdateCommit({
       status: 'error',
+      available: false,
+      latest: null,
       failures,
       checkedAt: now,
       nextAt: now + delay,
-      error: error instanceof Error ? error.message : String(error),
+      error: mvUpdateDescribe(error, MV_CHECK_TIMEOUT, T('serviceMarket')),
     })
+    return
   }
+
+  if (latest === null) {
+    mvUpdateCommit({
+      status: 'error',
+      available: false,
+      latest: null,
+      checkedAt: now,
+      nextAt: now + MV_BACKOFF_BASE,
+      error: T('updateNoVersion'),
+    })
+    return
+  }
+
+  const available = mvVersionGt(latest, installed)
+  mvUpdateCommit({
+    status: available ? 'available' : 'idle',
+    installed,
+    latest,
+    source,
+    available,
+    canAutoInstall: endpoints.updates !== undefined,
+    localOnly: typeof source === 'string' && /^link|local|file/i.test(source),
+    checkedAt: now,
+    nextAt: now + MV_CHECK_INTERVAL,
+    failures: 0,
+    error: null,
+    restartSupported: capabilities.restart?.supported === true,
+  })
 }
 
 /** Start the market's own update operation and poll it to a terminal state. */

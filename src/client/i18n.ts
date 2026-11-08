@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.16'
+const MV_PLUGIN_VERSION = '0.1.17'
 
 const MV_ZH = {
   panel: '分屏',
@@ -51,6 +51,20 @@ const MV_ZH = {
   updateUnsupported: '未检测到插件市场，无法自动更新',
   updateLocal: '当前为本地链接安装，自动更新不可用',
   updateIdle: '尚未检查更新',
+  updateTitleChecking: '检查更新',
+  updateTitleAvailable: '发现新版本 {version}',
+  updateTitleIdle: '已是最新版本',
+  updateTitleFailed: '检查更新失败',
+  updateTitleInstalling: '正在更新',
+  updateConfirmHint: '确认后会通过插件市场下载并安装。',
+  updateLater: '稍后',
+  updateClose: '关闭',
+  updateRetry: '重试',
+  updateTimeout: '{label}响应超时（{seconds} 秒）',
+  updateUnreachable: '无法连接{label}',
+  updateManual: '插件市场暂不可用，请用 dsh plugin add dsh-multiview 或插件页升级。',
+  updateNoVersion: '插件市场未返回版本号',
+  serviceMarket: '插件市场',
   cancel: '取消',
   close: '关闭',
   shortcutFocusPrev: '聚焦上一格',
@@ -98,6 +112,20 @@ const MV_EN = {
   updateUnsupported: 'No plugin market detected; automatic updates unavailable',
   updateLocal: 'Installed from a local link; automatic updates unavailable',
   updateIdle: 'Not checked yet',
+  updateTitleChecking: 'Check for updates',
+  updateTitleAvailable: 'Version {version} is available',
+  updateTitleIdle: 'Up to date',
+  updateTitleFailed: 'Update check failed',
+  updateTitleInstalling: 'Updating',
+  updateConfirmHint: 'This downloads and installs through the plugin market.',
+  updateLater: 'Later',
+  updateClose: 'Close',
+  updateRetry: 'Retry',
+  updateTimeout: '{label} timed out after {seconds}s',
+  updateUnreachable: 'Could not reach {label}',
+  updateManual: 'The plugin market is unavailable — update with dsh plugin add dsh-multiview, or from the Plugins page.',
+  updateNoVersion: 'The plugin market returned no version',
+  serviceMarket: 'the plugin market',
   cancel: 'Cancel',
   close: 'Close',
   shortcutFocusPrev: 'Focus previous pane',
