@@ -99,6 +99,7 @@ dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
 
 - Bug 与需求：[issues](https://github.com/Awenforever/dsh-multiview/issues)（模板会问最要紧的两件事：插件版本、宿主版本）。
 - 多格渲染成本：已在上游立项 [discussion #12559](https://github.com/deepseek-ai/deepseek-harness/discussions/12559)。
+- 限制浮层层级对比的主题令牌缺口（浅色无色阶、缺 state-business-secondary）：[discussion #12770](https://github.com/deepseek-ai/deepseek-harness/discussions/12770)。
 - 非分屏专属的问题（会话、权限、模型供应商）属于 harness 项目本身。
 
 ## 许可

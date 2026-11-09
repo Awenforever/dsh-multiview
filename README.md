@@ -101,6 +101,7 @@ referrer). Installs still go through the market. `scripts/check.mjs` enforces th
 
 - Bugs and feature requests: [issues](https://github.com/Awenforever/dsh-multiview/issues) (templates ask for the two things that matter — plugin version and host version).
 - Multi-pane rendering cost: filed upstream as [discussion #12559](https://github.com/deepseek-ai/deepseek-harness/discussions/12559).
+- Theme-token gaps that cap overlay contrast (no light surface step, missing state-business-secondary): [discussion #12770](https://github.com/deepseek-ai/deepseek-harness/discussions/12770).
 - Anything that is not split-view specific (sessions, permissions, providers) belongs to the harness project.
 
 ## License
