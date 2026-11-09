@@ -335,6 +335,7 @@ function PaneFrame(props) {
       'data-pane': '',
       'data-focused': focused ? 'true' : 'false',
       'data-drop': dragging.over === leaf.id && dragging.from !== null && dragging.from !== leaf.id ? 'true' : 'false',
+      'data-drag-source': dragging.from === leaf.id ? 'true' : 'false',
       onPointerDownCapture: () => surface.onFocus(leaf.id),
       onFocusCapture: () => surface.onFocus(leaf.id),
     },
@@ -552,6 +553,8 @@ function MvUpdateDialog(props) {
         ? T('updateTitleChecking')
         : failed
           ? T('updateTitleFailed')
+          : update.status === 'unsupported'
+            ? T('updateTitleUnsupported')
           : busy
             ? T('updateTitleInstalling')
             : update.checkedAt > 0

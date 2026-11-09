@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.22'
+const MV_PLUGIN_VERSION = '0.1.23'
 
 const MV_ZH = {
   panel: '分屏',
@@ -56,6 +56,7 @@ const MV_ZH = {
   updateTitleAvailable: '发现新版本 {version}',
   updateTitleIdle: '已是最新版本',
   updateTitleFailed: '检查更新失败',
+  updateTitleUnsupported: '未检测到插件市场',
   updateTitleInstalling: '正在更新',
   updateConfirmHint: '确认后会通过插件市场下载并安装。',
   updateLater: '稍后',
@@ -118,6 +119,7 @@ const MV_EN = {
   updateTitleAvailable: 'Version {version} is available',
   updateTitleIdle: 'Up to date',
   updateTitleFailed: 'Update check failed',
+  updateTitleUnsupported: 'No plugin market detected',
   updateTitleInstalling: 'Updating',
   updateConfirmHint: 'This downloads and installs through the plugin market.',
   updateLater: 'Later',
