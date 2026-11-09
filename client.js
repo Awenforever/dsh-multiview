@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.24';
+const MV_PLUGIN_VERSION = '0.1.25';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1184,7 +1184,8 @@ const MV_CSS = `
 .mv-pane{display:flex;flex-direction:column;flex:1 1 0;min-width:0;min-height:0;position:relative;background:var(--dsw-alias-bg-base)}
 .mv-head{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;flex:none;color:var(--dsw-alias-label-secondary);border-bottom:.5px solid transparent}
 .mv-pane[data-focused="true"] .mv-head{color:var(--dsw-alias-label-primary);border-bottom-color:var(--dsw-alias-border-l3)}
-.mv-pane[data-drag-source="true"]{opacity:.55}
+.mv-pane[data-drag-source="true"]{opacity:.75}
+.mv-pane[data-drag-source="true"] .mv-head{box-shadow:inset 0 0 0 1px var(--dsw-alias-state-business-primary)}
 .mv-pane[data-drop="true"]::after{content:"";position:absolute;inset:0;border:1px solid var(--dsw-alias-state-business-primary);border-radius:8px;pointer-events:none;z-index:5}
 .mv-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}
 .mv-dot[data-state="running"]{background:var(--dsw-alias-state-business-primary)}
@@ -1987,7 +1988,7 @@ function MvUpdateDialog(props) {
     }, body, actions));
 }
 function MvViewsButton(props) {
-    const { views, currentKey } = props;
+    const { views, currentId } = props;
     const [open, setOpen] = React.useState(false);
     const wrapRef = React.useRef(null);
     React.useEffect(()=>{
@@ -2034,8 +2035,8 @@ function MvViewsButton(props) {
     }, T('viewsEmpty')) : views.map((view)=>h('div', {
             key: view.id,
             className: 'mv-views-row',
-            'data-active': view.id === currentKey ? 'true' : 'false',
-            'aria-current': view.id === currentKey ? 'true' : undefined
+            'data-active': view.id === currentId ? 'true' : 'false',
+            'aria-current': view.id === currentId ? 'true' : undefined
         }, h('button', {
             type: 'button',
             className: 'mv-views-name',
@@ -2267,7 +2268,7 @@ function MultiviewStage(props) {
         onClick: mvRestore
     }, T('restore')), h(MvViewsButton, {
         views: state.views ?? [],
-        currentKey: mvViewKey(state.layout)
+        currentId: state.currentViewId ?? null
     }), h(MvUpdateButton, null), h('span', {
         className: 'mv-bar-spacer'
     }), h('div', {

@@ -623,7 +623,7 @@ function MvUpdateDialog(props) {
 
 /** Saved splits: auto-captured whenever two or more panes are bound. */
 function MvViewsButton(props) {
-  const { views, currentKey } = props
+  const { views, currentId } = props
   const [open, setOpen] = React.useState(false)
   const wrapRef = React.useRef(null)
 
@@ -673,7 +673,7 @@ function MvViewsButton(props) {
             : views.map((view) =>
                 h(
                   'div',
-                  { key: view.id, className: 'mv-views-row', 'data-active': view.id === currentKey ? 'true' : 'false', 'aria-current': view.id === currentKey ? 'true' : undefined },
+                  { key: view.id, className: 'mv-views-row', 'data-active': view.id === currentId ? 'true' : 'false', 'aria-current': view.id === currentId ? 'true' : undefined },
                   h(
                     'button',
                     {
@@ -896,7 +896,7 @@ function MultiviewStage(props) {
       state.maximized === null
         ? null
         : h('button', { type: 'button', className: 'mv-chip', 'data-active': 'true', onClick: mvRestore }, T('restore')),
-      h(MvViewsButton, { views: state.views ?? [], currentKey: mvViewKey(state.layout) }),
+      h(MvViewsButton, { views: state.views ?? [], currentId: state.currentViewId ?? null }),
       h(MvUpdateButton, null),
       h('span', { className: 'mv-bar-spacer' }),
       h('div', { className: 'mv-strip' }, chips),
