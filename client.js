@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.20';
+const MV_PLUGIN_VERSION = '0.1.21';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -27,6 +27,7 @@ const MV_ZH = {
     maximize: '最大化',
     restore: '还原',
     remove: '清空这一格',
+    divider: '调整窗格大小（方向键可调）',
     hostUnverified: 'DSH {version} 尚未验证',
     openMain: '在原生视图打开',
     shape: '格数',
@@ -87,6 +88,7 @@ const MV_EN = {
     maximize: 'Maximize',
     restore: 'Restore',
     remove: 'Clear this pane',
+    divider: 'Resize panes (arrow keys)',
     hostUnverified: 'DSH {version} is not verified',
     openMain: 'Open in native view',
     shape: 'Pane count',
@@ -1183,7 +1185,7 @@ const MV_CSS = `
 .mv-dot[data-state="running"]{background:var(--dsw-alias-state-business-primary)}
 .mv-dot[data-state="waiting"]{background:var(--dsw-alias-state-warn-primary)}
 .mv-dot[data-state="unread"]{background:var(--dsw-alias-state-success-primary)}
-body:not([data-ds-dark-theme]) .mv-dot{filter:brightness(0.75)}
+body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-dark-theme]) .mv-dot[data-state="unread"]{filter:brightness(0.75)}
 .mv-head-title{flex:1;min-width:0;font-size:13px;line-height:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab}
 .mv-head-title:active{cursor:grabbing}
 .mv-head-actions{display:flex;align-items:center;gap:2px;flex:none;opacity:0}
@@ -1194,8 +1196,7 @@ body:not([data-ds-dark-theme]) .mv-dot{filter:brightness(0.75)}
 .mv-pane-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .mv-note{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:100%;padding:24px;font-size:13px;line-height:20px;text-align:center;color:var(--dsw-alias-label-secondary)}
 .mv-note[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-.mv-note-action{height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;cursor:pointer}
-.mv-note-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
+
 .mv-picker{display:flex;flex-direction:column;flex:1;min-height:0;padding:12px}
 .mv-picker-search{height:30px;flex:none;margin:0 0 8px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;outline:none}
 .mv-picker-search:focus{border-color:var(--dsw-alias-state-business-primary)}
@@ -1211,7 +1212,7 @@ body:not([data-ds-dark-theme]) .mv-dot{filter:brightness(0.75)}
 .mv-views-toggle{position:relative}
 .mv-views-toggle[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-views-count{position:absolute;top:-3px;right:-4px;min-width:12px;height:12px;padding:0 2px;border:1.5px solid var(--dsw-alias-bg-base);border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font-size:8px;line-height:12px;text-align:center;pointer-events:none}
-.mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-layer-1)}
+.mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
 .mv-views-empty{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .mv-views-row{display:flex;align-items:center;gap:4px;border-radius:6px}
 .mv-views-row[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover)}
@@ -1223,16 +1224,15 @@ body:not([data-ds-dark-theme]) .mv-dot{filter:brightness(0.75)}
 .mv-update[data-has-update="true"]::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:999px;background:var(--dsw-alias-state-error-primary)}
 .mv-update[data-busy="true"] svg{animation:mv-spin 1s linear infinite}
 @keyframes mv-spin{to{transform:rotate(360deg)}}
-.mv-dialog-backdrop{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent)}
-body[data-ds-dark-theme] .mv-dialog-backdrop{background:color-mix(in srgb, var(--dsw-alias-bg-base) 62%, transparent)}
-.mv-dialog{width:min(420px, calc(100vw - 48px));padding:16px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
+.mv-dialog-backdrop{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-bg-mask-1)}
+.mv-dialog{width:min(420px, calc(100vw - 48px));padding:16px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:12px;background:var(--dsw-alias-bg-layer-2)}
 .mv-dialog-title{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary)}
 .mv-dialog-text{margin-top:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);word-break:break-word}
 .mv-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .mv-dialog-button{height:28px;padding:0 12px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}
 .mv-dialog-button:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.mv-dialog-button--primary{border-color:transparent;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-bg-base);box-shadow:inset 0 0 0 100px var(--dsw-alias-interactive-bg-hover),inset 0 0 0 100px var(--dsw-alias-interactive-bg-hover)}
-.mv-dialog-button--primary:hover{background:var(--dsw-alias-state-business-primary);filter:brightness(0.92)}
+.mv-dialog-button--primary{border-color:transparent;background:color-mix(in srgb, var(--dsw-alias-state-business-primary) 88%, var(--dsw-alias-label-primary));color:var(--dsw-alias-bg-base)}
+.mv-dialog-button--primary:hover{background:color-mix(in srgb, var(--dsw-alias-state-business-primary) 80%, var(--dsw-alias-label-primary))}
 .mv-dialog-button:disabled{opacity:.55;cursor:default}
 .mv-dialog-button--primary:disabled:hover{filter:none}
 .mv-dialog-button:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
@@ -1240,13 +1240,15 @@ body[data-ds-dark-theme] .mv-dialog-backdrop{background:color-mix(in srgb, var(-
 .mv-picker-owner{flex:none;max-width:45%;padding:0 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mv-picker-item[data-owned="true"]{opacity:0.45;cursor:not-allowed}
 .mv-picker-item[data-owned="true"]:hover{background:transparent}
+.mv-picker-item[data-owned="true"][data-depth="1"]:hover{color:var(--dsw-alias-label-secondary)}
+.mv-dialog-button:not(.mv-dialog-button--primary):disabled:hover{background:transparent}
 .mv-bar{color:var(--dsw-alias-label-primary)}
 .mv-icon{color:var(--dsw-alias-label-primary)}
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
 .mv-chip[data-active="true"]{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 
-.mv-live-hidden{display:none}
+
 @media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
 `;
 function MvGlyph(props) {
@@ -1685,6 +1687,13 @@ function MvDivider(props) {
         window.addEventListener('pointerup', stop);
         window.addEventListener('pointercancel', stop);
     };
+    const onKeyDown = (event)=>{
+        const decrease = node.dir === 'row' ? 'ArrowLeft' : 'ArrowUp';
+        const increase = node.dir === 'row' ? 'ArrowRight' : 'ArrowDown';
+        if (event.key !== decrease && event.key !== increase) return;
+        event.preventDefault();
+        onResize(node.id, node.ratio + (event.key === increase ? 0.02 : -0.02));
+    };
     return h('div', {
         ref,
         className: 'mv-divider',
@@ -1692,8 +1701,14 @@ function MvDivider(props) {
         'data-divider': node.id,
         'data-dragging': dragging ? 'true' : 'false',
         role: 'separator',
+        tabIndex: 0,
         'aria-orientation': node.dir === 'row' ? 'vertical' : 'horizontal',
-        onPointerDown: beginDrag
+        'aria-label': T('divider'),
+        'aria-valuenow': String(Math.round(node.ratio * 100)),
+        'aria-valuemin': '22',
+        'aria-valuemax': '78',
+        onPointerDown: beginDrag,
+        onKeyDown
     });
 }
 function MvSplitView(props) {
@@ -1733,16 +1748,8 @@ function PaneFrame(props) {
         'data-pane': '',
         'data-focused': focused ? 'true' : 'false',
         'data-drop': dragging.over === leaf.id && dragging.from !== null && dragging.from !== leaf.id ? 'true' : 'false',
-        onPointerDownCapture: (event)=>{
-            const target = event.target;
-            if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return;
-            surface.onFocus(leaf.id);
-        },
-        onFocusCapture: (event)=>{
-            const target = event.target;
-            if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return;
-            surface.onFocus(leaf.id);
-        }
+        onPointerDownCapture: ()=>surface.onFocus(leaf.id),
+        onFocusCapture: ()=>surface.onFocus(leaf.id)
     }, h('div', {
         className: 'mv-head',
         'data-pane-head': ''
@@ -1858,6 +1865,7 @@ function MvUpdateButton() {
         type: 'button',
         className: 'mv-icon mv-update',
         'data-has-update': update.available === true ? 'true' : 'false',
+        'aria-haspopup': 'dialog',
         'data-busy': update.status === 'checking' || update.status === 'installing' ? 'true' : 'false',
         title: caption,
         'aria-label': T('updateCheck'),
@@ -1876,6 +1884,49 @@ function MvUpdateButton() {
 }
 function MvUpdateDialog(props) {
     const { update, caption, onClose } = props;
+    const dialogRef = React.useRef(null);
+    const returnRef = React.useRef(null);
+    React.useEffect(()=>{
+        const previous = document.activeElement;
+        returnRef.current = previous;
+        const dialog = dialogRef.current;
+        if (dialog !== null) {
+            const first = dialog.querySelector('button:not(:disabled)');
+            if (first !== null) first.focus();
+            else dialog.focus();
+        }
+        return ()=>{
+            const target = returnRef.current;
+            if (target !== null && typeof target.focus === 'function') {
+                try {
+                    target.focus();
+                } catch (error) {}
+            }
+        };
+    }, []);
+    const onKeyDown = (event)=>{
+        if (event.key === 'Escape') {
+            event.stopPropagation();
+            onClose();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const dialog = dialogRef.current;
+        if (dialog === null) return;
+        const focusable = [
+            ...dialog.querySelectorAll('button:not(:disabled)')
+        ];
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
     const busy = update.status === 'installing';
     const checking = update.status === 'checking';
     const failed = update.status === 'error';
@@ -1920,21 +1971,47 @@ function MvUpdateDialog(props) {
             if (event.target === event.currentTarget) onClose();
         }
     }, h('div', {
+        ref: dialogRef,
         className: 'mv-dialog',
         role: 'dialog',
-        'aria-label': title
+        'aria-modal': 'true',
+        'aria-label': title,
+        tabIndex: -1,
+        onKeyDown
     }, body, actions));
 }
 function MvViewsButton(props) {
     const { views, currentKey } = props;
     const [open, setOpen] = React.useState(false);
+    const wrapRef = React.useRef(null);
+    React.useEffect(()=>{
+        if (!open) return undefined;
+        const onKey = (event)=>{
+            if (event.key === 'Escape') setOpen(false);
+        };
+        const onPointer = (event)=>{
+            const wrap = wrapRef.current;
+            if (wrap !== null && event.target instanceof Node && !wrap.contains(event.target)) setOpen(false);
+        };
+        window.addEventListener('keydown', onKey);
+        window.addEventListener('pointerdown', onPointer, true);
+        return ()=>{
+            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('pointerdown', onPointer, true);
+        };
+    }, [
+        open
+    ]);
     return h('div', {
-        className: 'mv-views'
+        className: 'mv-views',
+        ref: wrapRef
     }, h('button', {
         type: 'button',
         className: 'mv-icon mv-views-toggle',
         'data-active': open ? 'true' : 'false',
         'data-count': views.length > 0 ? String(views.length) : undefined,
+        'aria-expanded': open ? 'true' : 'false',
+        'aria-haspopup': 'true',
         title: T('views'),
         'aria-label': T('views'),
         onClick: ()=>setOpen((value)=>!value)
@@ -2168,6 +2245,7 @@ function MultiviewStage(props) {
             type: 'button',
             className: 'mv-chip',
             'data-active': leaves.length === count && maximizedLeaf === null ? 'true' : 'false',
+            'aria-pressed': leaves.length === count && maximizedLeaf === null ? 'true' : 'false',
             title: mvFormat(T('shapeN'), {
                 n: count
             }),

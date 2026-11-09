@@ -277,6 +277,15 @@ function MvDivider(props) {
     window.addEventListener('pointercancel', stop)
   }
 
+  /* Arrow keys move the boundary by 2% of the window, so the layout is
+     reachable without a pointer; the separator reports its current split. */
+  const onKeyDown = (event) => {
+    const decrease = node.dir === 'row' ? 'ArrowLeft' : 'ArrowUp'
+    const increase = node.dir === 'row' ? 'ArrowRight' : 'ArrowDown'
+    if (event.key !== decrease && event.key !== increase) return
+    event.preventDefault()
+    onResize(node.id, node.ratio + (event.key === increase ? 0.02 : -0.02))
+  }
   return h('div', {
     ref,
     className: 'mv-divider',
@@ -284,8 +293,14 @@ function MvDivider(props) {
     'data-divider': node.id,
     'data-dragging': dragging ? 'true' : 'false',
     role: 'separator',
+    tabIndex: 0,
     'aria-orientation': node.dir === 'row' ? 'vertical' : 'horizontal',
+    'aria-label': T('divider'),
+    'aria-valuenow': String(Math.round(node.ratio * 100)),
+    'aria-valuemin': '22',
+    'aria-valuemax': '78',
     onPointerDown: beginDrag,
+    onKeyDown,
   })
 }
 
@@ -320,19 +335,8 @@ function PaneFrame(props) {
       'data-pane': '',
       'data-focused': focused ? 'true' : 'false',
       'data-drop': dragging.over === leaf.id && dragging.from !== null && dragging.from !== leaf.id ? 'true' : 'false',
-      /* Ignore focus noise coming from a transcript this level keeps hidden: hiding a
-         focused node makes the browser move focus elsewhere, and treating that as a
-         user focus change makes the rotation and the focus chase each other. */
-      onPointerDownCapture: (event) => {
-        const target = event.target
-        if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return
-        surface.onFocus(leaf.id)
-      },
-      onFocusCapture: (event) => {
-        const target = event.target
-        if (target instanceof Element && target.closest('.mv-live-hidden') !== null) return
-        surface.onFocus(leaf.id)
-      },
+      onPointerDownCapture: () => surface.onFocus(leaf.id),
+      onFocusCapture: () => surface.onFocus(leaf.id),
     },
     h(
       'div',
@@ -462,6 +466,7 @@ function MvUpdateButton() {
         type: 'button',
         className: 'mv-icon mv-update',
         'data-has-update': update.available === true ? 'true' : 'false',
+        'aria-haspopup': 'dialog',
         'data-busy': update.status === 'checking' || update.status === 'installing' ? 'true' : 'false',
         title: caption,
         'aria-label': T('updateCheck'),
@@ -486,6 +491,53 @@ function MvUpdateButton() {
 /** Confirm-and-run dialog for the market's own update operation. */
 function MvUpdateDialog(props) {
   const { update, caption, onClose } = props
+  const dialogRef = React.useRef(null)
+  const returnRef = React.useRef(null)
+
+  /* Move focus into the dialog, contain Tab, let Escape close, and give focus
+     back to whatever opened the dialog when it unmounts. */
+  React.useEffect(() => {
+    const previous = document.activeElement
+    returnRef.current = previous
+    const dialog = dialogRef.current
+    if (dialog !== null) {
+      const first = dialog.querySelector('button:not(:disabled)')
+      if (first !== null) first.focus()
+      else dialog.focus()
+    }
+    return () => {
+      const target = returnRef.current
+      if (target !== null && typeof target.focus === 'function') {
+        try {
+          target.focus()
+        } catch (error) {
+          /* The trigger may have been removed; losing focus beats throwing. */
+        }
+      }
+    }
+  }, [])
+
+  const onKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation()
+      onClose()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const dialog = dialogRef.current
+    if (dialog === null) return
+    const focusable = [...dialog.querySelectorAll('button:not(:disabled)')]
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
   const busy = update.status === 'installing'
   const checking = update.status === 'checking'
   const failed = update.status === 'error'
@@ -549,7 +601,20 @@ function MvUpdateDialog(props) {
         if (event.target === event.currentTarget) onClose()
       },
     },
-    h('div', { className: 'mv-dialog', role: 'dialog', 'aria-label': title }, body, actions),
+    h(
+      'div',
+      {
+        ref: dialogRef,
+        className: 'mv-dialog',
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': title,
+        tabIndex: -1,
+        onKeyDown,
+      },
+      body,
+      actions,
+    ),
   )
 }
 
@@ -557,9 +622,29 @@ function MvUpdateDialog(props) {
 function MvViewsButton(props) {
   const { views, currentKey } = props
   const [open, setOpen] = React.useState(false)
+  const wrapRef = React.useRef(null)
+
+  /* A disclosure that cannot be dismissed from the keyboard is a trap; close it
+     on Escape and on any pointer press outside the popover. */
+  React.useEffect(() => {
+    if (!open) return undefined
+    const onKey = (event) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    const onPointer = (event) => {
+      const wrap = wrapRef.current
+      if (wrap !== null && event.target instanceof Node && !wrap.contains(event.target)) setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onPointer, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onPointer, true)
+    }
+  }, [open])
   return h(
     'div',
-    { className: 'mv-views' },
+    { className: 'mv-views', ref: wrapRef },
     h(
       'button',
       {
@@ -567,6 +652,8 @@ function MvViewsButton(props) {
         className: 'mv-icon mv-views-toggle',
         'data-active': open ? 'true' : 'false',
         'data-count': views.length > 0 ? String(views.length) : undefined,
+        'aria-expanded': open ? 'true' : 'false',
+        'aria-haspopup': 'true',
         title: T('views'),
         'aria-label': T('views'),
         onClick: () => setOpen((value) => !value),
@@ -794,6 +881,7 @@ function MultiviewStage(props) {
               type: 'button',
               className: 'mv-chip',
               'data-active': leaves.length === count && maximizedLeaf === null ? 'true' : 'false',
+              'aria-pressed': leaves.length === count && maximizedLeaf === null ? 'true' : 'false',
               title: mvFormat(T('shapeN'), { n: count }),
               'aria-label': mvFormat(T('shapeN'), { n: count }),
               onClick: () => mvSetShape(count),
