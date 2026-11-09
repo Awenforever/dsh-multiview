@@ -670,7 +670,7 @@ function MvViewsButton(props) {
             : views.map((view) =>
                 h(
                   'div',
-                  { key: view.id, className: 'mv-views-row', 'data-active': view.id === currentKey ? 'true' : 'false' },
+                  { key: view.id, className: 'mv-views-row', 'data-active': view.id === currentKey ? 'true' : 'false', 'aria-current': view.id === currentKey ? 'true' : undefined },
                   h(
                     'button',
                     {

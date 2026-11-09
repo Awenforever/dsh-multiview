@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.21';
+const MV_PLUGIN_VERSION = '0.1.22';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1195,10 +1195,10 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-icon:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
 .mv-pane-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .mv-note{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:100%;padding:24px;font-size:13px;line-height:20px;text-align:center;color:var(--dsw-alias-label-secondary)}
-.mv-note[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
+.mv-note[data-error="true"]{color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 92%, var(--dsw-alias-label-primary))}
 
 .mv-picker{display:flex;flex-direction:column;flex:1;min-height:0;padding:12px}
-.mv-picker-search{height:30px;flex:none;margin:0 0 8px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;outline:none}
+.mv-picker-search{height:30px;flex:none;margin:0 0 8px;padding:0 10px;border:1px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;outline:none}
 .mv-picker-search:focus{border-color:var(--dsw-alias-state-business-primary)}
 .mv-picker-search::placeholder{color:var(--dsw-alias-label-secondary);opacity:1}
 .mv-picker-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
@@ -1215,7 +1215,7 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-views-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;min-width:240px;max-width:min(520px, 64vw);max-height:320px;overflow:auto;padding:4px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
 .mv-views-empty{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .mv-views-row{display:flex;align-items:center;gap:4px;border-radius:6px}
-.mv-views-row[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-views-row[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);box-shadow:inset 2px 0 0 var(--dsw-alias-state-business-primary)}
 .mv-views-name{flex:1;min-width:0;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .mv-views-name:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-views-del{flex:none;width:22px;height:22px;margin-right:4px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
@@ -2028,7 +2028,8 @@ function MvViewsButton(props) {
     }, T('viewsEmpty')) : views.map((view)=>h('div', {
             key: view.id,
             className: 'mv-views-row',
-            'data-active': view.id === currentKey ? 'true' : 'false'
+            'data-active': view.id === currentKey ? 'true' : 'false',
+            'aria-current': view.id === currentKey ? 'true' : undefined
         }, h('button', {
             type: 'button',
             className: 'mv-views-name',
