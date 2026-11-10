@@ -15,7 +15,9 @@ English | [中文](README.zh.md)
 装好后左侧面板列表多一个「分屏」图标；点它把中央列切换为分屏舞台，再点一次回到原生会话。
 
 - 要求：DSH `>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || >=0.2.3-rc.1 <0.3.0-0`（`engines.dsh`）。每一条预发布线都显式列出——node-semver 不会让预发布版本匹配一个未点名该版本的区间。
-- 卸载：插件页停用/移除 → 重启即可，残留只有一个 `localStorage['dsh.multiview.v1']` 布局键（面板里「还原」会清掉它）。
+- 卸载：插件页停用/移除 → 重启即可。会留下两个 `localStorage` 键：`dsh.multiview.v1`（保存的布局与分屏）
+  与 `dsh.multiview.update.v1`（上次更新检查结果，避免每次重新加载都再查一遍）。面板里的「还原」只清布局键；
+  想要完全干净，把两个都删掉。
 
 ## 用法
 
@@ -100,7 +102,9 @@ factory（`variant:'embedded'`）+ `sessions.retain` + `shortcuts` + `locale`。
 客户端只会发两类网络请求：插件市场的同源 API，以及**仅用于版本发现**的 `registry.npmjs.org/dsh-multiview/latest`
 公共读取（不带凭据、不带 referrer）。安装仍然走市场。`scripts/check.mjs` 会守住这份清单。
 
-`engines.dsh` 接受整个 `0.2.x`。构建在 `0.2.1-rc.5` 与 `0.2.2-rc.1` 上验证过；其他版本会在顶栏 tooltip 里注明"尚未验证"，而不是假装验证过。
+`engines.dsh` 接受从 `0.2.1-rc.5` 起的 `0.2` 线；`0.2.0` 与 `rc.5` 之前的 0.2.1 预发布不在范围内。
+构建在 `0.2.1-rc.5` 与 `0.2.2-rc.1` 上验证过，这两条线（含其补丁版本）不会触发顶栏提示；
+其他小版本会在 tooltip 里追加「DSH x.y.z 尚未验证」，而不是假装验证过。
 
 - Bug 与需求：[issues](https://github.com/Awenforever/dsh-multiview/issues)（模板会问最要紧的两件事：插件版本、宿主版本）。
 - 多格渲染成本：已在上游立项 [discussion #12559](https://github.com/deepseek-ai/deepseek-harness/discussions/12559)。

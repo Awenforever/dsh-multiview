@@ -15,7 +15,10 @@ Install from npm with `dsh plugin add dsh-multiview`, or search for it under **P
 A "Split" icon appears in the left panel list; click it to turn the central column into the stage, click again to return to the native conversation.
 
 - Requires DSH `>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || >=0.2.3-rc.1 <0.3.0-0` (`engines.dsh`). Each prerelease line is listed explicitly, because node-semver does not let a prerelease match a range that never names its version.
-- Uninstall: disable/remove on the Plugins page, restart. The only residue is the `localStorage['dsh.multiview.v1']` layout key (the stage's "Reset" clears it).
+- Uninstall: disable/remove on the Plugins page, restart. Two `localStorage` keys stay behind:
+  `dsh.multiview.v1` (the saved layout and splits) and `dsh.multiview.update.v1` (the last
+  update-check result, so the button does not re-check on every reload). The stage's "Reset"
+  clears the layout key; remove them both if you want a clean slate.
 
 ## Using it
 
@@ -104,8 +107,10 @@ The only network requests the client makes are the plugin market's same-origin A
 discovery only, a public read of `registry.npmjs.org/dsh-multiview/latest` (no credentials, no
 referrer). Installs still go through the market. `scripts/check.mjs` enforces that list.
 
-`engines.dsh` accepts the whole `0.2.x` line. Builds are verified against `0.2.1-rc.5` and
-`0.2.2-rc.1`; on any other version the toolbar tooltip says so instead of pretending it was tested.
+`engines.dsh` accepts the `0.2` line from `0.2.1-rc.5` upward; `0.2.0` and 0.2.1 prereleases before
+`rc.5` are excluded. Builds are verified against `0.2.1-rc.5` and `0.2.2-rc.1`, and the toolbar
+tooltip stays silent across those two whole lines (patch-level differences are expected to keep the
+API). On any other minor it appends 「DSH x.y.z 尚未验证」 instead of pretending the build was tested.
 
 - Bugs and feature requests: [issues](https://github.com/Awenforever/dsh-multiview/issues) (templates ask for the two things that matter — plugin version and host version).
 - Multi-pane rendering cost: filed upstream as [discussion #12559](https://github.com/deepseek-ai/deepseek-harness/discussions/12559).
