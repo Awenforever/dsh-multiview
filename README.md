@@ -14,7 +14,7 @@ Install from npm with `dsh plugin add dsh-multiview`, or search for it under **P
 
 A "Split" icon appears in the left panel list; click it to turn the central column into the stage, click again to return to the native conversation.
 
-- Requires DSH `>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.3.0` (`engines.dsh`).
+- Requires DSH `>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || >=0.2.3-rc.1 <0.3.0-0` (`engines.dsh`). Each prerelease line is listed explicitly, because node-semver does not let a prerelease match a range that never names its version.
 - Uninstall: disable/remove on the Plugins page, restart. The only residue is the `localStorage['dsh.multiview.v1']` layout key (the stage's "Reset" clears it).
 
 ## Using it

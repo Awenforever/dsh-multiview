@@ -28,7 +28,75 @@ ok(pkg.name === 'dsh-multiview', 'package name must be dsh-multiview')
 ok(typeof pkg.version === 'string' && /^\d+\.\d+\.\d+$/.test(pkg.version), 'version must be semver')
 ok(pkg.license === 'MIT', 'license must be MIT')
 ok(pkg.engines !== undefined && typeof pkg.engines.dsh === 'string', 'engines.dsh is required')
-ok(pkg.engines?.dsh === '>=0.2.1-rc.5 <0.3.0', 'unexpected engines.dsh range')
+/* The range must accept every version this project is verified on, and must
+   not accept a line we have never run. Measured with a local implementation of
+   node-semver's prerelease rule, because a copied string cannot catch the trap
+   where `>=0.2.1-rc.5 <0.3.0` silently drops 0.2.2-rc.1. */
+const parseVersion = (text) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(text)
+  if (match === null) return null
+  return {
+    parts: [Number(match[1]), Number(match[2]), Number(match[3])],
+    pre: match[4] === undefined ? [] : match[4].split('.'),
+  }
+}
+const compareVersion = (a, b) => {
+  for (let index = 0; index < 3; index += 1) {
+    if (a.parts[index] !== b.parts[index]) return a.parts[index] < b.parts[index] ? -1 : 1
+  }
+  /* A version without a prerelease outranks the same version with one. */
+  if (a.pre.length === 0 && b.pre.length === 0) return 0
+  if (a.pre.length === 0) return 1
+  if (b.pre.length === 0) return -1
+  const length = Math.max(a.pre.length, b.pre.length)
+  for (let index = 0; index < length; index += 1) {
+    const left = a.pre[index]
+    const right = b.pre[index]
+    if (left === undefined) return -1
+    if (right === undefined) return 1
+    const leftNumeric = /^\d+$/.test(left)
+    const rightNumeric = /^\d+$/.test(right)
+    if (leftNumeric && rightNumeric) {
+      if (Number(left) !== Number(right)) return Number(left) < Number(right) ? -1 : 1
+      continue
+    }
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1
+    if (left !== right) return left < right ? -1 : 1
+  }
+  return 0
+}
+const satisfiesRange = (version, range) => {
+  const target = parseVersion(version)
+  if (target === null) return false
+  return range.split('||').some((branch) => {
+    const comparators = branch.trim().split(/\s+/).filter(Boolean)
+    /* Semver only lets a prerelease match a set that mentions its tuple. */
+    const sameTuple = comparators.some((comparator) => {
+      const operand = parseVersion(comparator.replace(/^[<>=]+/, ''))
+      return operand !== null && operand.pre.length > 0 && operand.parts.every((part, index) => part === target.parts[index])
+    })
+    if (target.pre.length > 0 && !sameTuple) return false
+    return comparators.every((comparator) => {
+      const operator = (/^[<>=]+/.exec(comparator) ?? [''])[0]
+      const operand = parseVersion(comparator.slice(operator.length))
+      if (operand === null) return false
+      const order = compareVersion(target, operand)
+      if (operator === '>=') return order >= 0
+      if (operator === '>') return order > 0
+      if (operator === '<=') return order <= 0
+      if (operator === '<') return order < 0
+      return order === 0
+    })
+  })
+}
+const engineRange = pkg.engines?.dsh ?? ''
+ok(satisfiesRange('0.2.1-rc.5', engineRange), 'engines.dsh must accept 0.2.1-rc.5, a version this build is verified on')
+ok(satisfiesRange('0.2.2-rc.1', engineRange), 'engines.dsh must accept 0.2.2-rc.1 (the prerelease trap: a plain >=0.2.1-rc.5 <0.3.0 rejects it)')
+ok(satisfiesRange('0.2.2', engineRange), 'engines.dsh must accept the 0.2.2 final release')
+ok(!satisfiesRange('0.3.0-rc.1', engineRange), 'engines.dsh must not accept an untested 0.3 prerelease')
+ok(!satisfiesRange('0.3.0', engineRange), 'engines.dsh must not accept 0.3.0')
+ok(!satisfiesRange('0.1.9', engineRange), 'engines.dsh must not accept a pre-0.2 line')
+ok(engineRange.includes('<0.2.2-0') && engineRange.includes('<0.2.3-0'), 'engines.dsh must enumerate each prerelease line explicitly')
 ok(pkg.dsh?.bundle?.patch === './cordis.patch.yml', 'bundle patch must be ./cordis.patch.yml')
 ok(pkg.dsh?.client?.platform === 'web', 'client platform must be web')
 ok(pkg.dsh?.client?.immediately === true, 'client must load immediately')

@@ -160,7 +160,7 @@ function apply(ctx) {
   const host = typeof window === 'undefined' ? '' : window.location.hostname
   if (host === '127.0.0.1' || host === 'localhost') {
     window.__mvDebug = {
-      version: '0.1.0',
+      version: MV_PLUGIN_VERSION,
       list: () => PTX.sessions.list.getSnapshot(),
       seed: (limit) => mvSeed(limit),
       live: () => mvConversationLive(),

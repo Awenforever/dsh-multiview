@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.25';
+const MV_PLUGIN_VERSION = '0.1.26';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -2423,7 +2423,7 @@ function apply(ctx) {
     const host = typeof window === 'undefined' ? '' : window.location.hostname;
     if (host === '127.0.0.1' || host === 'localhost') {
         window.__mvDebug = {
-            version: '0.1.0',
+            version: MV_PLUGIN_VERSION,
             list: ()=>PTX.sessions.list.getSnapshot(),
             seed: (limit)=>mvSeed(limit),
             live: ()=>mvConversationLive(),
