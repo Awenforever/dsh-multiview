@@ -84,7 +84,15 @@ dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
 
 The overlay's row name is an absolute `file:///` URL to this repo's `index.js` (the Loader anchors relative row names at the profile root, not beside the patch file).
 
-The client only uses public slot surfaces: a keyed `main` panel, a private child slot, `SessionProvider`, the `conversation.content` factory (`variant:'embedded'`), `sessions.retain`, `shortcuts` and `locale`. See [docs/DESIGN.md](docs/DESIGN.md).
+Rendering goes through public surfaces only: a keyed `main` panel, a session-scoped child slot,
+`SessionProvider`, the `conversation.content` factory (`variant:'embedded'`), `sessions.retain`,
+`shortcuts` and `locale`.
+
+Two things fall outside that and are worth knowing before you install it: to open a file preview
+from inside a pane it finds the host's own file chip by class name and click-dispatches it (the
+right sidebar has no session surface while a main panel is active), and it reads one private store
+field (`retainedBy.mainView`) to decide which session currently owns the native view. Both are
+fallbacks with a documented reason, not the primary path. See [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Status and support
 

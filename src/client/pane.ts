@@ -34,6 +34,9 @@ function mvPhase(session: any, conversation: any, summaryBlank: boolean | undefi
   return settling ? 'settling' : hero ? 'hero' : 'active'
 }
 
+/** Shown when the host has no Session reference to hand out yet. */
+const mvSessionUnavailable = 'the host has no session reference available yet'
+
 /** Pin the factory's View position to Chat so a pane never grows its own tabs. */
 function FixedChatView(props) {
   return h(React.Fragment, null, props.renderSlot('conversation.session', { view: 'chat' }))
@@ -108,6 +111,13 @@ function PaneHost(props) {
       reference = PTX.sessions.retain(sessionId, { source: 'multiview' })
     } catch (error) {
       setState({ reference: null, error: error instanceof Error ? error.message : String(error) })
+      return undefined
+    }
+    /* `retain` resolves lazily and has been observed returning nothing during a
+       host-side session-list race; dereferencing `.ready` then threw inside this
+       effect, which surfaces as a crashed pane rather than a message. */
+    if (reference === null || reference === undefined || typeof reference.ready?.then !== 'function') {
+      setState({ reference: null, error: mvSessionUnavailable })
       return undefined
     }
     let cancelled = false

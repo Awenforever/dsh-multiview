@@ -86,7 +86,12 @@ dsh --profile web --patch <repo>\.dev\dev.patch.yml --port 40602 --no-open
 
 `dev.patch.yml` 里的 row 名用绝对 `file:///` 指向本仓库的 `index.js`（Loader 的相对名锚定在 profile 根，不是 patch 文件旁）。
 
-客户端契约只走公开插槽面：`main` keyed 面板 + 私有子槽 + `SessionProvider` + `conversation.content` factory（`variant:'embedded'`）+ `sessions.retain` + `shortcuts` + `locale`。详见 [docs/DESIGN.md](docs/DESIGN.md)。
+渲染只走公开插槽面：`main` keyed 面板 + 会话作用域子槽 + `SessionProvider` + `conversation.content`
+factory（`variant:'embedded'`）+ `sessions.retain` + `shortcuts` + `locale`。
+
+有两处不在这条线上，安装前值得知道：从格内打开文件预览时，它会按类名找到宿主自己的文件胶囊并
+代为点击（全局面板激活时右栏没有会话面）；另外它读取一个私有 store 字段（`retainedBy.mainView`）
+来判断谁当前占着原生视图。两者都是有据可查的兜底路径，不是主路径。详见 [docs/DESIGN.md](docs/DESIGN.md)。
 
 ## 状态与支持
 

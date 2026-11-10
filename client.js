@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.26';
+const MV_PLUGIN_VERSION = '0.1.27';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -1326,6 +1326,7 @@ function mvPhase(session, conversation, summaryBlank) {
     const hero = shellPhase === 'blank' && (session.openState === 'open' || summaryBlank === true);
     return settling ? 'settling' : hero ? 'hero' : 'active';
 }
+const mvSessionUnavailable = 'the host has no session reference available yet';
 function FixedChatView(props) {
     return h(React.Fragment, null, props.renderSlot('conversation.session', {
         view: 'chat'
@@ -1400,6 +1401,13 @@ function PaneHost(props) {
             setState({
                 reference: null,
                 error: error instanceof Error ? error.message : String(error)
+            });
+            return undefined;
+        }
+        if (reference === null || reference === undefined || typeof reference.ready?.then !== 'function') {
+            setState({
+                reference: null,
+                error: mvSessionUnavailable
             });
             return undefined;
         }
