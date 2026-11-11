@@ -63,7 +63,7 @@ export function createHarness() {
   let cursor = 0
   let dirty = false
   let effects = []
-  const cleanups = []
+  const effectCleanups = new Map()
 
   const hooks = {
     useState(initial) {
@@ -94,10 +94,10 @@ export function createHarness() {
       return slots.refs.get(key)
     },
     useEffect(effect) {
-      effects.push(effect)
+      effects.push({ key: currentKey + ':' + String(cursor++), effect })
     },
     useLayoutEffect(effect) {
-      effects.push(effect)
+      effects.push({ key: currentKey + ':' + String(cursor++), effect })
     },
     useMemo(factory) {
       return factory()
@@ -142,27 +142,50 @@ export function createHarness() {
    * that pass, and skipping it means the scheduled work never starts, which looks like a component
    * that ignores its input.
    */
+  function flushEffects(pending) {
+    for (const { key, effect } of pending) {
+      const previous = effectCleanups.get(key)
+      if (typeof previous === 'function') {
+        try {
+          previous()
+        } catch {
+          /* A failing cleanup must not hide the assertion that follows. */
+        }
+        effectCleanups.delete(key)
+      }
+      const cleanup = effect()
+      if (typeof cleanup === 'function') effectCleanups.set(key, cleanup)
+    }
+  }
+
   function render(component, props, maxPasses = 20) {
     let tree = renderOnce(component, props)
     let pass = 0
     while (dirty && pass < maxPasses) {
       const pending = effects
       effects = []
-      for (const effect of pending) {
-        const cleanup = effect()
-        if (typeof cleanup === 'function') cleanups.push(cleanup)
-      }
+      flushEffects(pending)
       tree = renderOnce(component, props)
       pass += 1
     }
-    for (const effect of effects) {
-      const cleanup = effect()
-      if (typeof cleanup === 'function') cleanups.push(cleanup)
-    }
+    flushEffects(effects)
+    effects = []
     return tree
   }
 
-  return { render }
+  /** Run every effect cleanup, as unmounting the tree would. */
+  function unmount() {
+    for (const [key, cleanup] of effectCleanups) {
+      try {
+        cleanup()
+      } catch {
+        /* ignore */
+      }
+      effectCleanups.delete(key)
+    }
+  }
+
+  return { render, unmount }
 }
 
 /* ---------- tree helpers ---------- */

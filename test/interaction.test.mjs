@@ -310,3 +310,94 @@ test('the picker asks the host index when the filter is a phrase', async () => {
   assert.equal(rows.length, 1, 'only the content hit remains')
   assert.equal(textOf(rows[0]), 'S3the WAL discussion', 'the hit carries its snippet')
 })
+
+const searchProps = (list) => ({
+  renderSlot: () => null,
+  SessionProvider: ({ children }) => children,
+  useSessions: (selector) => selector(list),
+  useSessionStatus: (selector) => selector(new Map()),
+})
+
+test('search requests collapse while typing, and only the last answer is used', async () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const calls = []
+  let firstResolve = null
+  const { stage, hook } = bootHost({
+    sessions: list,
+    search: (query, signal) => {
+      calls.push({ query, signal })
+      if (query === 'ab') {
+        /* Deliberately answer the older request later than the newer one. */
+        return new Promise((resolve) => { firstResolve = () => resolve({ ok: true, value: { items: [{ sessionId: 's2', snippet: 'stale hit' }], hasMore: false } }) })
+      }
+      return Promise.resolve({ ok: true, value: { items: [{ sessionId: 's3', snippet: 'fresh hit' }], hasMore: false } })
+    },
+  })
+  const harness = createHarness()
+  hook.bind('p1', null)
+  const picker = (tree) => byClass(tree, 'mv-picker')[0]
+
+  let tree = harness.render(stage, searchProps(list))
+  picker(tree).props && null
+
+  /* Type 'ab' then 'abc' faster than the debounce: only the last phrase should reach the host. */
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'ab' } })
+  harness.render(stage, searchProps(list))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'abc' } })
+  tree = harness.render(stage, searchProps(list))
+  await new Promise((resolve) => setTimeout(resolve, 220))
+
+  assert.deepEqual(calls.map((call) => call.query), ['abc'], 'only the settled phrase is requested once')
+  tree = harness.render(stage, searchProps(list))
+  const rows = byClass(picker(tree), 'mv-picker-item')
+  assert.equal(rows.length, 1, 'one hit is listed')
+  assert.equal(textOf(rows[0]), 'S3fresh hit', 'the answer matches the last phrase')
+
+  /* A late arrival for the superseded phrase must not overwrite the fresh answer. */
+  if (firstResolve !== null) firstResolve()
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  tree = harness.render(stage, searchProps(list))
+  assert.equal(textOf(byClass(picker(tree), 'mv-picker-item')[0]), 'S3fresh hit', 'a stale answer is ignored')
+})
+
+test('a superseded search is aborted, and a failing search falls back to titles', async () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const signals = []
+  let fail = false
+  const { stage, hook } = bootHost({
+    sessions: list,
+    search: (query, signal) => {
+      signals.push(signal)
+      if (fail) return Promise.reject(new Error('index unavailable'))
+      return Promise.resolve({ ok: true, value: { items: [], hasMore: false } })
+    },
+  })
+  const harness = createHarness()
+  hook.bind('p1', null)
+  const picker = (tree) => byClass(tree, 'mv-picker')[0]
+
+  let tree = harness.render(stage, searchProps(list))
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'alpha' } })
+  tree = harness.render(stage, searchProps(list))
+  await new Promise((resolve) => setTimeout(resolve, 220))
+  assert.equal(signals.length, 1, 'the phrase was sent')
+  assert.ok(signals[0] instanceof AbortSignal, 'the host receives a cancellation signal')
+
+  /* Typing again supersedes the first request, which must be aborted. */
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'alphab' } })
+  tree = harness.render(stage, searchProps(list))
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  assert.equal(signals[0].aborted, true, 'the superseded request is aborted')
+
+  /* When the index fails, titles still filter and the list is not left saying "searching". */
+  fail = true
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'S2' } })
+  tree = harness.render(stage, searchProps(list))
+  await new Promise((resolve) => setTimeout(resolve, 220))
+  tree = harness.render(stage, searchProps(list))
+  const rows = byClass(picker(tree), 'mv-picker-item')
+  assert.equal(rows.length, 1, 'a failing index does not empty the list')
+  assert.equal(textOf(rows[0]), 'S2', 'the local title filter still works')
+  assert.equal(byClass(picker(tree), 'mv-picker-empty').length, 0, 'no misleading empty note')
+})
