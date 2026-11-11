@@ -296,6 +296,14 @@ test('shrinking keeps the conversation you are watching, growing leaves every se
   const shrunkEarly = mvShapeTo(tree, 2, 'p1')
   assert.deepEqual(mvLeaves(shrunkEarly).map((leaf) => leaf.sessionId), ['a', 'b'])
 
+  /* Focusing the second pane must not reshuffle anything: both panes survive, so the reading
+     order the user arranged stays exactly as it was. */
+  const shrunkSecond = mvShapeTo(tree, 2, 'p2')
+  assert.deepEqual(mvLeaves(shrunkSecond).map((leaf) => leaf.sessionId), ['a', 'b'])
+
+  const shrunkThird = mvShapeTo(tree, 3, 'p3')
+  assert.deepEqual(mvLeaves(shrunkThird).map((leaf) => leaf.sessionId), ['a', 'b', 'c'])
+
   /* Shrinking to three keeps the watched Session too. */
   const shrunkThree = mvShapeTo(tree, 3, 'p4')
   assert.deepEqual(mvLeaves(shrunkThree).map((leaf) => leaf.sessionId), ['d', 'a', 'b'])
