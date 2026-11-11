@@ -251,6 +251,8 @@ function apply(ctx) {
       paneEntries: () => (PTX.slots.entries(MV_PANE_SLOT) || []).length,
       open: () => PTX.layout.selectPanel(MV_PANEL_ID),
       close: () => PTX.layout.selectPanel(null),
+      update: () => mvUpdateState,
+      checkUpdate: (force) => mvUpdateCheck(force === true),
       workspaces: () => PTX.workspaces.list.getSnapshot(),
       openFor: (sessionId) => mvOpenForSession(sessionId),
       startView: () => mvStartView(),

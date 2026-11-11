@@ -615,3 +615,29 @@ test('the attention dot teaches the chord that walks between panes', () => {
   assert.match(String(dots[0].props.title), /Mod\+Alt\+J$/, 'the dot tooltip names the chord')
   assert.doesNotMatch(String(dots[0].props['aria-label']), /Mod\+Alt/, 'a screen reader hears the state, not the chord')
 })
+
+test('a failed update check schedules a retry instead of going quiet for a day', async () => {
+  const list = makeSessions(['s1'])
+  /* Every request fails: the host is offline, which is the case the backoff exists for. */
+  const host = bootHost({
+    sessions: list,
+    fetch: () => Promise.reject(new Error('offline')),
+  })
+
+  const before = host.hook.update()
+  assert.equal(before.checkedAt, 0, 'nothing has been checked yet')
+
+  const started = Date.now()
+  await host.hook.checkUpdate(true)
+
+  const after = host.hook.update()
+  assert.equal(after.status, 'error', 'the check reports failure')
+  assert.equal(after.failures, 1, 'the failure is counted')
+
+  /* The bug: stamping checkedAt here made the 24h gate swallow every scheduled retry. */
+  assert.equal(after.checkedAt, before.checkedAt, 'a failure does not pretend a check succeeded')
+  assert.ok(after.nextAt > started, 'a retry is scheduled')
+  const retryIn = after.nextAt - started
+  assert.ok(retryIn <= 60 * 60 * 1000 + 5000, `the retry is the one-hour backoff, not a day (got ${retryIn} ms)`)
+  assert.ok(retryIn >= 59 * 60 * 1000, 'and it is not sooner than the backoff')
+})

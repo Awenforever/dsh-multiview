@@ -339,6 +339,12 @@ export function bootHost(options = {}) {
     navigator: { userAgent: 'node', platform: 'linux' },
   }
   /* The bundle reads storage through `window`, so the fake window has to carry the same objects. */
+  /* `options.fetch` replaces the network; an unreachable host is the interesting case here. */
+  const fakeFetch = options.fetch ?? (() => Promise.reject(new Error('offline in tests')))
+  window.fetch = fakeFetch
+  /* Bare `fetch(...)` inside the bundle resolves to globalThis, not to the fake window. */
+  globalThis.fetch = fakeFetch
+  window.AbortController = globalThis.AbortController
   window.localStorage = localStorage
   window.document = document
   window.window = window

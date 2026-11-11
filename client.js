@@ -1432,10 +1432,12 @@ async function mvUpdateCheck(force) {
     });
     let installed = MV_PLUGIN_VERSION;
     let capabilities = null;
+    let capabilityFailure = null;
     try {
         capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CAPABILITY_TIMEOUT);
     } catch (error) {
         capabilities = null;
+        capabilityFailure = mvUpdateDescribe(error, MV_CAPABILITY_TIMEOUT, T('serviceMarket'));
     }
     const marketReady = capabilities !== null && capabilities.schema === 'dsh-market/update-api/v1';
     const endpoints = marketReady ? capabilities.endpoints ?? {} : {};
@@ -1459,12 +1461,12 @@ async function mvUpdateCheck(force) {
     if (latest === null) {
         const failures = mvUpdateState.failures + 1;
         mvUpdateCommit({
-            status: marketReady ? 'error' : 'unsupported',
+            status: marketReady || capabilities === null ? 'error' : 'unsupported',
             available: false,
             latest: null,
             failures,
             nextAt: now + mvBackoffDelay(failures, MV_BACKOFF_BASE, MV_BACKOFF_MAX),
-            error: failure ?? T('updateNoVersion')
+            error: failure ?? capabilityFailure ?? T('updateNoVersion')
         });
         return;
     }
@@ -3182,6 +3184,8 @@ function apply(ctx) {
             paneEntries: ()=>(PTX.slots.entries(MV_PANE_SLOT) || []).length,
             open: ()=>PTX.layout.selectPanel(MV_PANEL_ID),
             close: ()=>PTX.layout.selectPanel(null),
+            update: ()=>mvUpdateState,
+            checkUpdate: (force)=>mvUpdateCheck(force === true),
             workspaces: ()=>PTX.workspaces.list.getSnapshot(),
             openFor: (sessionId)=>mvOpenForSession(sessionId),
             startView: ()=>mvStartView(),

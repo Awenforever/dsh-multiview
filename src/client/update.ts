@@ -222,10 +222,14 @@ async function mvUpdateCheck(force?: boolean): Promise<void> {
   /* 1. Market capabilities: decides whether the install button can exist at all. */
   let installed = MV_PLUGIN_VERSION
   let capabilities: any = null
+  /* Remember *why* capabilities are missing: an unanswered request is a network problem, while an
+     answer with the wrong schema is a genuine "this host cannot auto-update". */
+  let capabilityFailure: string | null = null
   try {
     capabilities = await mvUpdateGet('/dsh-market/api/v1/capabilities', MV_CAPABILITY_TIMEOUT)
   } catch (error) {
     capabilities = null
+    capabilityFailure = mvUpdateDescribe(error, MV_CAPABILITY_TIMEOUT, T('serviceMarket'))
   }
   const marketReady = capabilities !== null && capabilities.schema === 'dsh-market/update-api/v1'
   const endpoints = marketReady ? capabilities.endpoints ?? {} : {}
@@ -255,12 +259,13 @@ async function mvUpdateCheck(force?: boolean): Promise<void> {
     /* `checkedAt` keeps the last *successful* check: advancing it here was what made the retry
        window meaningless, because the interval gate then blocked the backoff's own schedule. */
     mvUpdateCommit({
-      status: marketReady ? 'error' : 'unsupported',
+      /* Only an answered-but-wrong protocol counts as unsupported; no answer at all is a failure. */
+      status: marketReady || capabilities === null ? 'error' : 'unsupported',
       available: false,
       latest: null,
       failures,
       nextAt: now + mvBackoffDelay(failures, MV_BACKOFF_BASE, MV_BACKOFF_MAX),
-      error: failure ?? T('updateNoVersion'),
+      error: failure ?? capabilityFailure ?? T('updateNoVersion'),
     })
     return
   }
