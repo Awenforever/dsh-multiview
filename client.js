@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.47';
+const MV_PLUGIN_VERSION = '0.1.48';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -884,14 +884,19 @@ function mvFocus(leafId) {
         });
 }
 function mvToggleMaximize(leafId) {
-    mvCommit((current)=>current.maximized === leafId ? {
+    mvCommit((current)=>{
+        if (current.maximized === leafId) return {
             ...current,
             maximized: null
-        } : {
+        };
+        const leaf = mvLeafById(current.layout, leafId);
+        if (leaf === null || leaf.sessionId === null) return current;
+        return {
             ...current,
             maximized: leafId,
             focused: leafId
-        });
+        };
+    });
 }
 function mvRestore() {
     mvCommit((current)=>current.maximized === null ? current : {
@@ -930,10 +935,12 @@ function mvRemovePane(leafId) {
         if (leaf === null) return current;
         if (leaf.sessionId !== null) {
             const cleared = mvWithSession(current.layout, leafId, null);
-            return cleared === current.layout ? current : {
+            if (cleared === current.layout) return current;
+            return {
                 ...current,
                 layout: cleared,
-                focused: leafId
+                focused: leafId,
+                maximized: current.maximized === leafId ? null : current.maximized
             };
         }
         const leaves = mvLeaves(current.layout);
@@ -2028,7 +2035,7 @@ function PaneFrame(props) {
         onPointerDown: (event)=>surface.onHeadPointerDown(leaf.id, event)
     }, title), h('div', {
         className: 'mv-head-actions'
-    }, h(MvIconButton, {
+    }, sessionId === null ? null : h(MvIconButton, {
         label: maximized ? T('restore') : T('maximize'),
         path: maximized ? MV_ICON.restore : MV_ICON.maximize,
         onClick: ()=>surface.onMaximize(leaf.id)

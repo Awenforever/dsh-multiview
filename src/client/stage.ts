@@ -402,11 +402,15 @@ function PaneFrame(props) {
       h(
         'div',
         { className: 'mv-head-actions' },
-        h(MvIconButton, {
-          label: maximized ? T('restore') : T('maximize'),
-          path: maximized ? MV_ICON.restore : MV_ICON.maximize,
-          onClick: () => surface.onMaximize(leaf.id),
-        }),
+        /* Maximizing an empty pane would fill the stage with a picker and hide every other
+           conversation, so the control only exists where it does something useful. */
+        sessionId === null
+          ? null
+          : h(MvIconButton, {
+              label: maximized ? T('restore') : T('maximize'),
+              path: maximized ? MV_ICON.restore : MV_ICON.maximize,
+              onClick: () => surface.onMaximize(leaf.id),
+            }),
         sessionId === null
           ? null
           : h(MvIconButton, {

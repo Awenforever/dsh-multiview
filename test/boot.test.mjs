@@ -1099,3 +1099,73 @@ test('the maximize claim survives only while its pane keeps its Session', () => 
   switched.openFor('s3')
   assert.equal(switched.state().maximized, null, 'switching splits drops the maximize claim')
 })
+
+test('an empty pane cannot be maximized, and clearing the maximized pane drops the claim', () => {
+  const three = {
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'split', id: 's2', dir: 'col', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+      b: { kind: 'leaf', id: 'p3', sessionId: null } },
+  }
+  const seed = { version: 3, layout: three, focused: 'p1', preset: 3, seeded: true, currentViewId: null, views: [] }
+
+  /* Maximizing an empty pane would cover every other conversation with a picker. */
+  const empty = bootWithHook(seed).hook
+  empty.maximize('p3')
+  assert.equal(empty.state().maximized, null, 'an empty pane must not become maximized')
+
+  /* The keyboard path goes through the same function, so the same refusal holds. */
+  const bound = bootWithHook(seed).hook
+  bound.maximize('p2')
+  assert.equal(bound.state().maximized, 'p2', 'a bound pane can be maximized')
+
+  /* Removing (clearing) the maximized pane must drop the claim — this branch bypasses bind. */
+  bound.remove('p2')
+  assert.equal(bound.state().maximized, null, 'clearing the maximized pane drops the claim')
+  assert.equal(leavesOf(bound).find((leaf) => leaf.id === 'p2').sessionId, null, 'the pane is emptied, not removed')
+})
+
+test('the pane header offers maximize only where it does something', () => {
+  const renderStage = (layout) => {
+    const { context } = bootWithHook({
+      version: 3,
+      layout,
+      focused: 'p1',
+      preset: 3,
+      seeded: true,
+      currentViewId: null,
+      views: [],
+    })
+    const main = context.registered.find((entry) => entry.name === 'main')
+    return expand(
+      main.component({
+        renderSlot: () => null,
+        SessionProvider: ({ children }) => children,
+        useSessions: (selector) => selector(SESSIONS),
+        useSessionStatus: (selector) => selector(new Map()),
+      }),
+    )
+  }
+  const countLabel = (tree, label) => {
+    let total = 0
+    const walk = (node) => {
+      if (node == null || typeof node !== 'object') return
+      if (Array.isArray(node)) { node.forEach(walk); return }
+      if (node.props && node.props['aria-label'] === label) total += 1
+      for (const child of node.children ?? []) walk(child)
+    }
+    walk(tree)
+    return total
+  }
+
+  const tree = renderStage({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'split', id: 's2', dir: 'col', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+      b: { kind: 'leaf', id: 'p3', sessionId: null } },
+  })
+  assert.equal(countLabel(tree, 'maximize'), 2, 'only bound panes offer maximize')
+  assert.equal(countLabel(tree, 'remove'), 3, 'every pane can still be cleared or removed at three panes')
+})

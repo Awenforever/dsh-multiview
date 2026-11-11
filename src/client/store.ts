@@ -397,11 +397,15 @@ function mvFocus(leafId: string): void {
   mvCommit((current) => (current.focused === leafId ? current : { ...current, focused: leafId }))
 }
 
-/** Toggle the maximized pane. */
+/** Toggle the maximized pane. An empty pane cannot be maximized: it would hide every other
+ *  conversation behind a full-screen picker, which is the opposite of what the split is for. */
 function mvToggleMaximize(leafId: string): void {
-  mvCommit((current) =>
-    current.maximized === leafId ? { ...current, maximized: null } : { ...current, maximized: leafId, focused: leafId },
-  )
+  mvCommit((current) => {
+    if (current.maximized === leafId) return { ...current, maximized: null }
+    const leaf = mvLeafById(current.layout, leafId)
+    if (leaf === null || leaf.sessionId === null) return current
+    return { ...current, maximized: leafId, focused: leafId }
+  })
 }
 
 /** Restore the split from a maximized pane. */
@@ -450,7 +454,15 @@ function mvRemovePane(leafId: string): void {
     if (leaf === null) return current
     if (leaf.sessionId !== null) {
       const cleared = mvWithSession(current.layout, leafId, null)
-      return cleared === current.layout ? current : { ...current, layout: cleared, focused: leafId }
+      if (cleared === current.layout) return current
+      /* Clearing the maximized pane empties it, so the claim must go with it — this branch
+         bypasses mvBind, which is where the same rule already lives. */
+      return {
+        ...current,
+        layout: cleared,
+        focused: leafId,
+        maximized: current.maximized === leafId ? null : current.maximized,
+      }
     }
     const leaves = mvLeaves(current.layout)
     /* Two panes is the product minimum (presets, the chips and the saved-split key all assume
