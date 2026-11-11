@@ -121,6 +121,28 @@ export function mvSessionState(status: any): string {
 }
 
 /**
+ * Readable label for one Workspace entry.
+ *
+ * A fallback chain on paper, but `??` only skips nullish values: a blank title or a path with no
+ * basename produced an empty string, which then suppressed the picker's whole grouping. Every step
+ * here treats a blank value as absent.
+ * @param item - one entry of `workspaces.list.getSnapshot().items`.
+ * @returns a non-blank label, or the empty string when the entry carries nothing usable.
+ */
+export function mvWorkspaceLabel(item: any): string {
+  const title = typeof item?.title === 'string' ? item.title.trim() : ''
+  if (title !== '') return title
+  const path = typeof item?.path === 'string' ? item.path.trim() : ''
+  if (path !== '') {
+    const parts = path.split(/[\\/]/).filter((part: string) => part !== '')
+    const base = parts.length === 0 ? '' : parts[parts.length - 1]
+    if (base !== '') return base
+  }
+  const id = typeof item?.workspaceId === 'string' ? item.workspaceId.trim() : ''
+  return id
+}
+
+/**
  * Whether a state is asking for the user. `running` deliberately is not: producing output
  * is not a request (product decision, 2026-11-11).
  * @param state - one of the states `mvSessionState` returns.

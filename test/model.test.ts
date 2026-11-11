@@ -29,7 +29,8 @@ import {
   mvShapeTo,
   mvSwapSessions,
   mvWithSession,
-} from '../src/client/model.ts'
+  mvWorkspaceLabel,
+}from '../src/client/model.ts'
 
 /** Every leaf in reading order, as `[paneId, sessionId]` tuples. */
 function bindings(node) {
@@ -397,4 +398,28 @@ test('the host status shape is classified as documented', () => {
   assert.equal(mvSessionState({ running: true, pendingInteraction: null, completionUnread: false }), 'running')
   assert.equal(mvSessionState(undefined), 'idle')
   assert.equal(mvSessionState(null), 'idle')
+})
+
+test('a blank workspace title does not swallow the label', () => {
+  /* The bug: `title ?? pathBasename ?? workspaceId` returned '' because an empty string is not
+     nullish, and the picker then hid every group header. */
+  assert.equal(mvWorkspaceLabel({ title: '前端', workspaceId: 'w1' }), '前端')
+  assert.equal(mvWorkspaceLabel({ title: '', workspaceId: 'w1' }), 'w1', 'a blank title falls through')
+  assert.equal(mvWorkspaceLabel({ title: '   ', workspaceId: 'w1' }), 'w1', 'whitespace is blank too')
+  assert.equal(mvWorkspaceLabel({ workspaceId: 'w1' }), 'w1', 'a missing title falls through')
+})
+
+test('a path falls back to its basename, then to the id', () => {
+  assert.equal(mvWorkspaceLabel({ path: 'C:\\work\\dsh-multiview', workspaceId: 'w1' }), 'dsh-multiview')
+  assert.equal(mvWorkspaceLabel({ path: '/home/king/projects/api/', workspaceId: 'w1' }), 'api', 'a trailing slash is tolerated')
+  assert.equal(mvWorkspaceLabel({ path: '', workspaceId: 'w1' }), 'w1', 'an empty path falls through')
+  assert.equal(mvWorkspaceLabel({ path: 'C:\\', workspaceId: 'w1' }), 'C:', 'a drive root keeps its drive as the label')
+})
+
+test('a workspace with nothing usable yields an empty label rather than junk', () => {
+  assert.equal(mvWorkspaceLabel({}), '')
+  assert.equal(mvWorkspaceLabel(null), '')
+  assert.equal(mvWorkspaceLabel({ title: null, path: null, workspaceId: null }), '')
+  /* The label must never be the literal "undefined" or "null". */
+  assert.equal(mvWorkspaceLabel({ title: undefined, path: undefined }), '')
 })

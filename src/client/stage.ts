@@ -107,7 +107,7 @@ function mvPickableRows(
     for (const item of items) {
       const ids = (item.sessionIds ?? []).filter((id: string) => rows.has(id))
       if (ids.length === 0) continue
-      const label = item.title ?? String(item.path ?? '').split(/[\\/]/).pop() ?? item.workspaceId
+      const label = mvWorkspaceLabel(item)
       groups.push({ key: String(item.workspaceId), label: String(label), ids })
     }
     const loose = [...rows.keys()].filter((id) => !workspaceOf.has(id))

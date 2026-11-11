@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.1.92 — 2026-11-12
+
+### 修复：工作区分组标签可能变成空字符串，连带整组消失
+
+选择器里的回退链看起来是三级：
+
+```js
+item.title ?? String(item.path ?? '').split(/[\\/]/).pop() ?? item.workspaceId
+```
+
+但 `??` **只跳过 null/undefined**，而这里两个分支都会产出**空字符串**：
+
+- `title` 是 `''`（或全空格）→ 直接返回 `''`
+- `title` 缺失、`path` 也缺失 → `String('')` → `''` → `.split()` → `['']` → `.pop()` → `''`，**不是 nullish**，所以不会走到 `workspaceId`
+
+后果是连锁的：分组标签为 `''` → 渲染出一个空的 group 元素；而"是否显示分组头"的判断是
+`groups.filter(g => g.label !== '').length > 1`，于是**多个工作区时分组整体静默消失**，列表变平。
+
+现在回退链移进纯函数 `mvWorkspaceLabel`，每一步都把空白当作缺失：标题 → 路径末段（容忍结尾斜杠、
+盘符根）→ workspaceId → 空字符串（明确表示"没有可用信息"）。
+
+### 验证
+
+- 测试 92 → **95**：空白标题、全空格标题、缺失标题、结尾斜杠路径、盘符根、全空条目。
+- 变异验证四项全部失败（接受空标题、不 trim、不过滤空路径段、返回 undefined 而非空串）。
+
+### 我写错的断言
+
+最初断言"盘符根 `C:\` 没有末段，应回落到 id"，实际会得到 `C:`——**这是一个合理的标签**，
+是我的期望错了，不是实现错了。改成断言 `C:`。
+
+### 顺带核对
+
+`workspaces.list.getSnapshot().items` 里 `sessionIds` / `workspaceId` 两个字段，确认是宿主自己在
+`owningGroupKey` 里用同一组字段（`workspace.sessionIds.includes(...)` → `workspace.workspaceId`），
+选择器的分组依据成立。
+
+
+
 ## 0.1.91 — 2026-11-12
 
 ### 对齐从"看着像"变成"量出来"

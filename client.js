@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.91';
+const MV_PLUGIN_VERSION = '0.1.92';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -337,6 +337,18 @@ function mvSessionState(status) {
     if (status.running === true) return 'running';
     if (status.completionUnread === true) return 'unread';
     return 'idle';
+}
+function mvWorkspaceLabel(item) {
+    const title = typeof item?.title === 'string' ? item.title.trim() : '';
+    if (title !== '') return title;
+    const path = typeof item?.path === 'string' ? item.path.trim() : '';
+    if (path !== '') {
+        const parts = path.split(/[\\/]/).filter((part)=>part !== '');
+        const base = parts.length === 0 ? '' : parts[parts.length - 1];
+        if (base !== '') return base;
+    }
+    const id = typeof item?.workspaceId === 'string' ? item.workspaceId.trim() : '';
+    return id;
 }
 function mvNeedsAttention(state) {
     return state === 'waiting' || state === 'unread';
@@ -1957,7 +1969,7 @@ function mvPickableRows(query, views = [], currentViewId = null, onStage = []) {
         for (const item of items){
             const ids = (item.sessionIds ?? []).filter((id)=>rows.has(id));
             if (ids.length === 0) continue;
-            const label = item.title ?? String(item.path ?? '').split(/[\\/]/).pop() ?? item.workspaceId;
+            const label = mvWorkspaceLabel(item);
             groups.push({
                 key: String(item.workspaceId),
                 label: String(label),
