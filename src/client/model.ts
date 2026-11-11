@@ -514,6 +514,65 @@ export function mvShortcutHint(code: string): string {
   return 'Mod+Alt+' + mvKeyCap(code)
 }
 
+/** Split a version into its numeric core and its prerelease identifiers. */
+function mvVersionParts(version: string): { core: number[]; pre: string[] } {
+  const withoutBuild = String(version).split('+')[0]
+  const dash = withoutBuild.indexOf('-')
+  const core = dash < 0 ? withoutBuild : withoutBuild.slice(0, dash)
+  const pre = dash < 0 ? '' : withoutBuild.slice(dash + 1)
+  return {
+    core: core.split('.').map((part) => {
+      const value = Number.parseInt(part, 10)
+      return Number.isFinite(value) ? value : 0
+    }),
+    pre: pre === '' ? [] : pre.split('.'),
+  }
+}
+
+/** Compare two prerelease identifier lists; returns -1, 0 or 1. */
+function mvComparePre(left: string[], right: string[]): number {
+  /* No prerelease outranks any prerelease. */
+  if (left.length === 0 && right.length === 0) return 0
+  if (left.length === 0) return 1
+  if (right.length === 0) return -1
+  const length = Math.max(left.length, right.length)
+  for (let index = 0; index < length; index += 1) {
+    const a = left[index]
+    const b = right[index]
+    /* A shorter list is lower when every compared identifier is equal. */
+    if (a === undefined) return -1
+    if (b === undefined) return 1
+    const aNumeric = /^\d+$/.test(a)
+    const bNumeric = /^\d+$/.test(b)
+    if (aNumeric && bNumeric) {
+      const difference = Number(a) - Number(b)
+      if (difference !== 0) return difference < 0 ? -1 : 1
+      continue
+    }
+    /* Numeric identifiers always rank below alphanumeric ones. */
+    if (aNumeric !== bNumeric) return aNumeric ? -1 : 1
+    if (a !== b) return a < b ? -1 : 1
+  }
+  return 0
+}
+
+/**
+ * Whether `left` is a strictly newer version than `right`.
+ *
+ * Prereleases are compared, not discarded: `0.1.80` must be newer than `0.1.80-rc.1`, otherwise a
+ * user on a release candidate is never told the final shipped.
+ */
+export function mvVersionGt(left: string, right: string): boolean {
+  const a = mvVersionParts(left)
+  const b = mvVersionParts(right)
+  for (let index = 0; index < Math.max(a.core.length, b.core.length); index += 1) {
+    const first = a.core[index] ?? 0
+    const second = b.core[index] ?? 0
+    if (first !== second) return first > second
+  }
+  return mvComparePre(a.pre, b.pre) > 0
+}
+
 /**
  * Keep the saved-split library inside its cap without silently destroying a name.
  *

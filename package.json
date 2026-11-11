@@ -49,7 +49,7 @@
   "scripts": {
     "build": "node --disable-warning=ExperimentalWarning scripts/build.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts test/boot.test.mjs test/interaction.test.mjs test/scenario.test.mjs test/property.test.mjs test/algebra.property.test.mjs test/hydrate.property.test.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts test/boot.test.mjs test/interaction.test.mjs test/scenario.test.mjs test/property.test.mjs test/algebra.property.test.mjs test/hydrate.property.test.mjs test/version.test.mjs",
     "prepack": "node --disable-warning=ExperimentalWarning scripts/build.mjs && node scripts/check.mjs",
     "fuzz": "node .dev/vm/fuzz-invariants.mjs 300 40",
     "fuzz:render": "node .dev/vm/fuzz-render.mjs 250 25",

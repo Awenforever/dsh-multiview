@@ -123,26 +123,7 @@ function mvUpdateHydrate(): void {
   }
 }
 
-/** Split a version into numeric parts, ignoring build metadata. */
-function mvVersionParts(version: string): number[] {
-  const core = String(version).split('-')[0].split('+')[0]
-  return core.split('.').map((part) => {
-    const value = Number.parseInt(part, 10)
-    return Number.isFinite(value) ? value : 0
-  })
-}
 
-/** Whether `left` is a strictly newer version than `right`. */
-function mvVersionGt(left: string, right: string): boolean {
-  const a = mvVersionParts(left)
-  const b = mvVersionParts(right)
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    const first = a[index] ?? 0
-    const second = b[index] ?? 0
-    if (first !== second) return first > second
-  }
-  return false
-}
 
 /** Same-origin JSON GET with a bounded wait. */
 async function mvUpdateGet(url: string, timeoutMs: number = MV_REQUEST_TIMEOUT): Promise<any> {
