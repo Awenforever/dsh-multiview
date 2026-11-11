@@ -214,6 +214,23 @@ if (zhKeys !== null && enKeys !== null) {
   }
 }
 
+// ---- single source of truth, and two token names that have been written wrong ---------
+{
+  const stage = readFileSync(join(ROOT, 'src/client/stage.ts'), 'utf8')
+  ok(
+    !/===\s*'waiting'[^\n]*\|\|[^\n]*===\s*'unread'|===\s*'unread'[^\n]*\|\|[^\n]*===\s*'waiting'/.test(stage),
+    'stage.ts must not re-implement the attention rule; call mvNeedsAttention (model.ts) instead',
+  )
+
+  /* Both of these were real mistakes: the warning token is `state-warn-primary` (not
+     `state-warning-primary`) and there is no `bg-layer-4`. A wrong name silently falls back
+     to another colour, which is worse than a build error. */
+  const shipped = readFileSync(join(ROOT, 'client.js'), 'utf8')
+  for (const bad of ['state-warning-', 'bg-layer-4']) {
+    ok(!shipped.includes(bad), `client.js references "${bad}", which is not a theme token the host provides`)
+  }
+}
+
 // ---- report -------------------------------------------------------------------
 if (failures.length > 0) {
   for (const message of failures) console.error('FAIL ' + message)

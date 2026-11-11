@@ -96,6 +96,34 @@ export function mvArrangementKey(node: any): string {
 }
 
 /**
+ * Classify one Session's status object into the four states the UI shows.
+ *
+ * Order matters: a Session waiting for an answer is *also* running, so `waiting` is tested
+ * first, then `running`, then unread. Kept here rather than in the renderer because three
+ * separate surfaces (pane header, collapsed switcher, sidebar badge) must agree — when this
+ * lived in the stage, each new surface re-implemented the comparison and could drift.
+ * @param status - a Session status entry, or anything else.
+ * @returns `idle`, `running`, `waiting` or `unread`.
+ */
+export function mvSessionState(status: any): string {
+  if (status === undefined || status === null) return 'idle'
+  if (status.pendingInteraction !== undefined) return 'waiting'
+  if (status.running === true) return 'running'
+  if (status.completionUnread === true) return 'unread'
+  return 'idle'
+}
+
+/**
+ * Whether a state is asking for the user. `running` deliberately is not: producing output
+ * is not a request (product decision, 2026-11-11).
+ * @param state - one of the states `mvSessionState` returns.
+ * @returns true only for `waiting` and `unread`.
+ */
+export function mvNeedsAttention(state: string): boolean {
+  return state === 'waiting' || state === 'unread'
+}
+
+/**
  * Panes that want the user right now, in reading order.
  *
  * Only `waiting` (blocked on an approval or a question) and `unread` (finished while you
@@ -112,7 +140,7 @@ export function mvAttentionPanes(node: any, statusOf: (sessionId: string) => str
   for (const leaf of mvLeaves(node)) {
     if (leaf.sessionId === null || leaf.sessionId === undefined || leaf.sessionId === '') continue
     const state = statusOf(leaf.sessionId)
-    if (state === 'waiting' || state === 'unread') out.push(leaf.id)
+    if (mvNeedsAttention(state)) out.push(leaf.id)
   }
   return out
 }

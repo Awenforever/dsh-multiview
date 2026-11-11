@@ -19,7 +19,9 @@ import {
   mvDedupeViews,
   mvAttentionPanes,
   mvNextAttentionPane,
+  mvNeedsAttention,
   mvSessionSet,
+  mvSessionState,
   mvShapeTo,
   mvSwapSessions,
   mvWithSession,
@@ -259,4 +261,22 @@ test('a hand-written name outranks a newer unnamed entry when collapsing', () =>
 
   assert.equal(kept.length, 1)
   assert.equal(kept[0].id, 'named', 'losing the typed name would be worse than losing the timestamp')
+})
+
+test('status classification has one source of truth, and attention has one rule', () => {
+  /* Precedence: a Session blocked on a question is also running, so waiting must win. */
+  assert.equal(mvSessionState({ pendingInteraction: {}, running: true }), 'waiting')
+  assert.equal(mvSessionState({ running: true }), 'running')
+  assert.equal(mvSessionState({ running: true, completionUnread: true }), 'running')
+  assert.equal(mvSessionState({ completionUnread: true }), 'unread')
+  assert.equal(mvSessionState({}), 'idle')
+  assert.equal(mvSessionState(undefined), 'idle')
+  assert.equal(mvSessionState(null), 'idle')
+
+  /* Attention is derived from the same states, so new surfaces cannot invent their own rule. */
+  assert.equal(mvNeedsAttention('waiting'), true)
+  assert.equal(mvNeedsAttention('unread'), true)
+  assert.equal(mvNeedsAttention('running'), false)
+  assert.equal(mvNeedsAttention('idle'), false)
+  assert.equal(mvNeedsAttention(''), false)
 })

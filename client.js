@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.38';
+const MV_PLUGIN_VERSION = '0.1.39';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -319,12 +319,22 @@ function mvSessionSet(node) {
 function mvArrangementKey(node) {
     return mvSessionSet(node) + '@' + String(mvLeaves(node).length);
 }
+function mvSessionState(status) {
+    if (status === undefined || status === null) return 'idle';
+    if (status.pendingInteraction !== undefined) return 'waiting';
+    if (status.running === true) return 'running';
+    if (status.completionUnread === true) return 'unread';
+    return 'idle';
+}
+function mvNeedsAttention(state) {
+    return state === 'waiting' || state === 'unread';
+}
 function mvAttentionPanes(node, statusOf) {
     const out = [];
     for (const leaf of mvLeaves(node)){
         if (leaf.sessionId === null || leaf.sessionId === undefined || leaf.sessionId === '') continue;
         const state = statusOf(leaf.sessionId);
-        if (state === 'waiting' || state === 'unread') out.push(leaf.id);
+        if (mvNeedsAttention(state)) out.push(leaf.id);
     }
     return out;
 }
@@ -1612,7 +1622,7 @@ function MultiviewPanelIcon(props) {
     const state = useMvState();
     const readStatuses = typeof props?.useSessionStatus === 'function' ? props.useSessionStatus : null;
     const statuses = readStatuses === null ? null : readStatuses((snapshot)=>snapshot);
-    const count = statuses === null || statuses === undefined || typeof statuses.get !== 'function' ? 0 : mvAttentionPanes(state.layout, (sessionId)=>mvDotState(statuses.get(sessionId))).length;
+    const count = statuses === null || statuses === undefined || typeof statuses.get !== 'function' ? 0 : mvAttentionPanes(state.layout, (sessionId)=>mvSessionState(statuses.get(sessionId))).length;
     const label = count === 0 ? T('panel') : count === 1 ? T('panelAttentionOne') : T('panelAttention').replace('{count}', String(count));
     return h('span', {
         className: 'mv-icon-badge-host',
@@ -1643,13 +1653,7 @@ function MultiviewPanelIcon(props) {
         'aria-hidden': true
     }));
 }
-function mvDotState(status) {
-    if (status === undefined || status === null) return 'idle';
-    if (status.pendingInteraction !== undefined) return 'waiting';
-    if (status.running === true) return 'running';
-    if (status.completionUnread === true) return 'unread';
-    return 'idle';
-}
+const mvDotState = mvSessionState;
 function mvDotLabel(state) {
     if (state === 'running') return T('running');
     if (state === 'waiting') return T('waiting');

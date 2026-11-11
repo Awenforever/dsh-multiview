@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.39 — 2026-11-11
+
+### 重构（防止口径漂移）
+
+- **状态分类与注意力规则收敛到一处**：mvSessionState / mvNeedsAttention 移入 model.ts，stage.ts 的 mvDotState 变成它的别名。此前"什么算需要你"散落在四个消费点（格头状态点、窄窗切换器、侧栏徽标、跳转命令），每加一个界面就要重写一次比较——这正是口径漂移的温床，而 0.1.34 刚把口径定成"不含运行中"。
+- 单元测试 +1（共 23）：覆盖**优先级**（等待>运行，{pendingInteraction, running} 必须是 waiting）、四种状态映射、以及 mvNeedsAttention 对 running/idle 返回 false。
+
+### 新增守卫（scripts/check.mjs）
+
+- 渲染层不得重新实现注意力规则（出现 === 'waiting' || === 'unread' 即失败）。
+- 发行包里不得出现 state-warning- 或 g-layer-4：这两个名字都曾被写错，且**写错的后果是静默回退到别的颜色**，比构建报错更糟。真实令牌是 --dsw-alias-state-warn-primary（经 Inspect Provider 确认）。
+
+### 验证
+
+- 两组守卫均做变异验证：在渲染层复制一份注意力规则 → 失败；把 warn 写成 warning → 失败；恢复 → 通过。
+- 状态分类测试同样做变异验证：让 running 重新计入 / 去掉等待优先级 / 把 unread 归为 idle → 三次均失败。
+
+### 说明
+
+- 未在 VM 验证：VM 仍停在 Web authentication failed（R32）。本轮为纯重构 + 测试 + 构建期守卫，行为不变。
+
+
 ## 0.1.38 — 2026-11-11
 
 ### 新增

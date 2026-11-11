@@ -29,7 +29,7 @@ function MultiviewPanelIcon(props: any) {
   const count =
     statuses === null || statuses === undefined || typeof statuses.get !== 'function'
       ? 0
-      : mvAttentionPanes(state.layout, (sessionId) => mvDotState(statuses.get(sessionId))).length
+      : mvAttentionPanes(state.layout, (sessionId) => mvSessionState(statuses.get(sessionId))).length
   const label =
     count === 0 ? T('panel') : count === 1 ? T('panelAttentionOne') : T('panelAttention').replace('{count}', String(count))
   /* 16×16 with the shipped rows' own stroke weight, so the glyph sits on the
@@ -54,14 +54,9 @@ function MultiviewPanelIcon(props: any) {
   )
 }
 
-/** Status dot state for one pane, derived from the shared Session status map. */
-function mvDotState(status: any): string {
-  if (status === undefined || status === null) return 'idle'
-  if (status.pendingInteraction !== undefined) return 'waiting'
-  if (status.running === true) return 'running'
-  if (status.completionUnread === true) return 'unread'
-  return 'idle'
-}
+/** Status dot state for one pane. The classification lives in `model.ts` so the pane header,
+ *  the collapsed switcher and the sidebar badge cannot drift apart. */
+const mvDotState = mvSessionState
 
 /** Accessible label for a dot state. */
 function mvDotLabel(state: string): string {
