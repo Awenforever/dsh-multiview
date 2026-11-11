@@ -472,18 +472,24 @@ export function mvTrimViews<T extends { id: string; customName?: string }>(
   candidates: T[],
   cap: number,
 ): { views: T[]; keptNewcomer: boolean } {
-  if (candidates.length <= cap) return { views: candidates, keptNewcomer: true }
   const named = (entry: T): boolean => typeof entry.customName === 'string' && entry.customName.trim() !== ''
-  /* Search from the oldest end so the most recent unnamed entry is the last resort. */
-  for (let index = candidates.length - 1; index >= 1; index -= 1) {
-    if (named(candidates[index])) continue
-    const kept = candidates.filter((_, position) => position !== index)
-    return { views: kept.slice(0, cap), keptNewcomer: true }
+  if (candidates.length <= cap) return { views: candidates, keptNewcomer: true }
+  if (cap <= 0) return { views: [], keptNewcomer: false }
+
+  const newcomer = candidates[0]
+  const rest = candidates.slice(1)
+  const namedRest = rest.filter(named)
+  const unnamedRest = rest.filter((entry) => !named(entry))
+
+  /* Keep the newcomer only when doing so costs no hand-written name. */
+  if (namedRest.length <= cap - 1) {
+    return { views: [newcomer, ...namedRest, ...unnamedRest].slice(0, cap), keptNewcomer: true }
   }
-  /* Everything is named: keep the library exactly as it was and let the newcomer stay unsaved.
-     It is index 0, so the library is the slice that skips it. */
-  return { views: candidates.slice(1, cap + 1), keptNewcomer: false }
+  /* Otherwise every name outranks the newcomer; the library itself may still exceed the cap only if
+     it already contained more named entries than the cap allows. */
+  return { views: [...namedRest, ...unnamedRest].slice(0, cap), keptNewcomer: false }
 }
+
 
 /**
  * Merge host content hits into the title-matched rows.

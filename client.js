@@ -585,21 +585,34 @@ function mvShortcutHint(code) {
     return 'Mod+Alt+' + mvKeyCap(code);
 }
 function mvTrimViews(candidates, cap) {
+    const named = (entry)=>typeof entry.customName === 'string' && entry.customName.trim() !== '';
     if (candidates.length <= cap) return {
         views: candidates,
         keptNewcomer: true
     };
-    const named = (entry)=>typeof entry.customName === 'string' && entry.customName.trim() !== '';
-    for(let index = candidates.length - 1; index >= 1; index -= 1){
-        if (named(candidates[index])) continue;
-        const kept = candidates.filter((_, position)=>position !== index);
+    if (cap <= 0) return {
+        views: [],
+        keptNewcomer: false
+    };
+    const newcomer = candidates[0];
+    const rest = candidates.slice(1);
+    const namedRest = rest.filter(named);
+    const unnamedRest = rest.filter((entry)=>!named(entry));
+    if (namedRest.length <= cap - 1) {
         return {
-            views: kept.slice(0, cap),
+            views: [
+                newcomer,
+                ...namedRest,
+                ...unnamedRest
+            ].slice(0, cap),
             keptNewcomer: true
         };
     }
     return {
-        views: candidates.slice(1, cap + 1),
+        views: [
+            ...namedRest,
+            ...unnamedRest
+        ].slice(0, cap),
         keptNewcomer: false
     };
 }
