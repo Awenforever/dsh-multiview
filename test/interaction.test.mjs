@@ -451,3 +451,85 @@ test('a fresh answer with no hits clears them', async () => {
   assert.equal(byClass(picker(tree), 'mv-picker-item').length, 0, 'stale hits are cleared by an empty answer')
   assert.equal(textOf(byClass(picker(tree), 'mv-picker-empty')[0]), 'pickEmpty', 'and the list says there is no match')
 })
+
+test('a two-pane split can change a pane without deleting or growing', () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  const props = {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  }
+  const render = () => harness.render(stage, props)
+
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  let tree = render()
+  assert.equal(byClass(tree, 'mv-picker').length, 0, 'both panes show conversations')
+
+  /* The change action exists on a bound pane even at the two-pane minimum. */
+  const changes = byLabel(tree, 'paneChange')
+  assert.equal(changes.length, 2, 'each bound pane offers it')
+
+  /* Opening it swaps the body for a picker, leaving the other pane alone. */
+  changes[0].props.onClick(fakeEvent())
+  tree = render()
+  assert.equal(byClass(tree, 'mv-picker').length, 1, 'one picker replaces one conversation')
+  const panes = byClass(tree, 'mv-pane')
+  assert.equal(byClass(panes[1], 'mv-picker').length, 0, 'the other pane is untouched')
+
+  /* Picking a free conversation re-points the pane instead of adding one. */
+  byClass(byClass(tree, 'mv-picker')[0], 'mv-picker-item')
+    .find((row) => textOf(row) === 'S3')
+    .props.onClick(fakeEvent())
+  tree = render()
+  const state = hook.state()
+  const leaves = []
+  const walk = (node) => {
+    if (node === null || node === undefined) return
+    if (node.kind === 'leaf') { leaves.push(node); return }
+    walk(node.a)
+    walk(node.b)
+  }
+  walk(state.layout)
+  assert.equal(leaves.length, 2, 'the split did not grow')
+  assert.deepEqual(leaves.map((leaf) => leaf.sessionId), ['s3', 's2'], 'only the chosen pane changed')
+  assert.equal(byClass(tree, 'mv-picker').length, 0, 'the picker closes after choosing')
+})
+
+test('Escape cancels the change without touching the pane', () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  const props = {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  }
+  const render = () => harness.render(stage, props)
+
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  let tree = render()
+  byLabel(tree, 'paneChange')[1].props.onClick(fakeEvent())
+  tree = render()
+  assert.equal(byClass(tree, 'mv-picker').length, 1, 'the picker is open')
+
+  const search = byClass(byClass(tree, 'mv-picker')[0], 'mv-picker-search')[0]
+  search.props.onKeyDown({ key: 'Escape', currentTarget: { blur: () => {} }, preventDefault: () => {} })
+  tree = render()
+  assert.equal(byClass(tree, 'mv-picker').length, 0, 'Escape restores the conversation')
+
+  const leaves = []
+  const walk = (node) => {
+    if (node === null || node === undefined) return
+    if (node.kind === 'leaf') { leaves.push(node); return }
+    walk(node.a)
+    walk(node.b)
+  }
+  walk(hook.state().layout)
+  assert.deepEqual(leaves.map((leaf) => leaf.sessionId), ['s1', 's2'], 'nothing was rebound')
+})

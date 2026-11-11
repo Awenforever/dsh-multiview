@@ -253,7 +253,10 @@ function MvPanePicker(props) {
       onChange: (event) => setQuery(event.target.value),
       onKeyDown: (event) => {
         if (event.key === 'Enter' && rows.length > 0) onPick(rows[0].id)
-        if (event.key === 'Escape') event.currentTarget.blur()
+        if (event.key === 'Escape') {
+          if (typeof props.onCancel === 'function') props.onCancel()
+          else event.currentTarget.blur()
+        }
       },
     }),
     h(
@@ -521,6 +524,13 @@ function PaneFrame(props) {
         sessionId === null
           ? null
           : h(MvIconButton, {
+              label: T('paneChange'),
+              path: MV_ICON.change,
+              onClick: () => surface.onRepick(leaf.id),
+            }),
+        sessionId === null
+          ? null
+          : h(MvIconButton, {
               label: T('openMain'),
               path: MV_ICON.external,
               onClick: () => surface.onOpenMain(sessionId),
@@ -538,7 +548,22 @@ function PaneFrame(props) {
     h(
       'div',
       { className: 'mv-pane-body' },
-      sessionId === null
+      sessionId !== null && surface.repicking === leaf.id
+        ? h(MvPanePicker, {
+            onPick: (id) => {
+              /* Binding to this pane swaps its conversation; picking one that already lives in
+                 another pane moves it, which is the same rule as everywhere else. */
+              surface.onBind(leaf.id, id)
+              surface.onRepick(leaf.id)
+            },
+            onCancel: () => surface.onRepick(leaf.id),
+            views: surface.state.views,
+            currentViewId: surface.state.currentViewId,
+            onStage: mvLeaves(surface.state.layout)
+              .map((item) => item.sessionId)
+              .filter((id) => id !== null),
+          })
+        : sessionId === null
         ? h(MvPanePicker, {
           onPick: (id) => surface.onBind(leaf.id, id),
           views: surface.state.views,
@@ -1130,10 +1155,17 @@ function MultiviewStage(props) {
     }
   }, [])
 
+  /* Which pane is being re-pointed at another conversation, if any. Replace-in-place exists so a
+     two-pane split can swap a conversation without first deleting a pane (which is impossible
+     there) or growing the split. */
+  const [repicking, setRepicking] = React.useState(null)
+
   const surface = {
     useSessions,
     state,
     statuses,
+    repicking,
+    onRepick: (leafId) => setRepicking((current) => (current === leafId ? null : leafId)),
     SessionProvider,
     renderSlot,
     dragging: drag,

@@ -38,6 +38,7 @@ const MV_ZH = {
     rowActionAdd: '在分屏中打开',
     rowActionFocus: '已在分屏中，点击聚焦',
     rowActionMenu: '在分屏中打开',
+    paneChange: '换一个对话',
     openMain: '在原生视图打开',
     shape: '格数',
     shapeN: '{n} 格',
@@ -112,6 +113,7 @@ const MV_EN = {
     rowActionAdd: 'Open in split view',
     rowActionFocus: 'Already in the split — click to focus',
     rowActionMenu: 'Open in split view',
+    paneChange: 'Change conversation',
     openMain: 'Open in native view',
     shape: 'Pane count',
     shapeN: '{n} panes',
@@ -1609,6 +1611,7 @@ const MV_ICON = {
     restore: 'M6 6H3v3M10 10h3V7M10 6V3h3M6 10H3V7',
     close: 'M4 4l8 8M12 4l-8 8',
     external: 'M6 10L13 3M9 3h4v4',
+    change: 'M3 6.5h7.5M8 4l2.5 2.5L8 9M13 9.5H5.5M8 7l-2.5 2.5L8 12',
     updateCheck: 'M8 2a6 6 0 1 0 0 12A6 6 0 1 0 8 2zM8 10.7V5.7M5.6 8.1 8 5.6l2.4 2.5',
     updateInstall: 'M3 9.5v3c0 .6.45 1 1 1h8c.55 0 1-.4 1-1v-3M8 2.6v6.2M5.4 6.4 8 9l2.6-2.6',
     pause: 'M6 3.5v9M10 3.5v9',
@@ -2014,7 +2017,10 @@ function MvPanePicker(props) {
         onChange: (event)=>setQuery(event.target.value),
         onKeyDown: (event)=>{
             if (event.key === 'Enter' && rows.length > 0) onPick(rows[0].id);
-            if (event.key === 'Escape') event.currentTarget.blur();
+            if (event.key === 'Escape') {
+                if (typeof props.onCancel === 'function') props.onCancel();
+                else event.currentTarget.blur();
+            }
         }
     }), h('div', {
         className: 'mv-picker-list'
@@ -2212,6 +2218,10 @@ function PaneFrame(props) {
         path: maximized ? MV_ICON.restore : MV_ICON.maximize,
         onClick: ()=>surface.onMaximize(leaf.id)
     }), sessionId === null ? null : h(MvIconButton, {
+        label: T('paneChange'),
+        path: MV_ICON.change,
+        onClick: ()=>surface.onRepick(leaf.id)
+    }), sessionId === null ? null : h(MvIconButton, {
         label: T('openMain'),
         path: MV_ICON.external,
         onClick: ()=>surface.onOpenMain(sessionId)
@@ -2222,7 +2232,16 @@ function PaneFrame(props) {
         onClick: ()=>surface.onRemove(leaf.id)
     }) : null)), h('div', {
         className: 'mv-pane-body'
-    }, sessionId === null ? h(MvPanePicker, {
+    }, sessionId !== null && surface.repicking === leaf.id ? h(MvPanePicker, {
+        onPick: (id)=>{
+            surface.onBind(leaf.id, id);
+            surface.onRepick(leaf.id);
+        },
+        onCancel: ()=>surface.onRepick(leaf.id),
+        views: surface.state.views,
+        currentViewId: surface.state.currentViewId,
+        onStage: mvLeaves(surface.state.layout).map((item)=>item.sessionId).filter((id)=>id !== null)
+    }) : sessionId === null ? h(MvPanePicker, {
         onPick: (id)=>surface.onBind(leaf.id, id),
         views: surface.state.views,
         currentViewId: surface.state.currentViewId,
@@ -2695,10 +2714,13 @@ function MultiviewStage(props) {
             window.removeEventListener('pointercancel', up);
         };
     }, []);
+    const [repicking, setRepicking] = React.useState(null);
     const surface = {
         useSessions,
         state,
         statuses,
+        repicking,
+        onRepick: (leafId)=>setRepicking((current)=>current === leafId ? null : leafId),
         SessionProvider,
         renderSlot,
         dragging: drag,
