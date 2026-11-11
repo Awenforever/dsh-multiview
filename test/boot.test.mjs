@@ -1325,3 +1325,39 @@ test('the panel icon follows the requested size', () => {
   const fallback = expand(icon.component({ active: false, useSessionStatus: (selector) => selector(new Map()) }))
   assert.equal(sizeOf(fallback).width, 16, 'without a request the glyph stays 16px')
 })
+
+test('the shortcut registration matches the host contract', () => {
+  /* Verified against the host registry (`@deepseek-ai/dsh-client-shortcuts`):
+     - defaults are keyed `<runtime>:<platform>` and resolved with exactly that string;
+     - `label()` is called as a function and `aliases` is read as an array;
+     - dispatch consults `regions`, blocks when `modals` does not contain the open modal, and runs
+       `resolve(...).run()` only when resolve answers status 'handled'. */
+  const { context } = bootWithHook(null)
+  const commands = context.registered.shortcuts
+  assert.ok(commands.length >= 5, 'every pane command is registered')
+
+  for (const command of commands) {
+    assert.equal(typeof command.id, 'string', 'a command needs an id')
+    assert.equal(typeof command.label, 'function', 'the label is re-read per locale, so it must be a function')
+    assert.ok(Array.isArray(command.aliases), 'aliases is an array')
+    assert.ok(Array.isArray(command.regions) && command.regions.includes('page'), 'page input must reach the command')
+    assert.ok(Array.isArray(command.modals), 'modals is an array')
+    assert.equal(typeof command.resolve, 'function', 'resolve produces the runnable answer')
+
+    /* Only desktop profiles carry a default: the web shell rejects these chords, and declaring one
+       would fail registration and lose the command. */
+    for (const key of Object.keys(command.defaults)) {
+      assert.ok(key.startsWith('desktop:'), 'only desktop defaults are declared, found ' + key)
+      const binding = command.defaults[key]
+      assert.equal(typeof binding.code, 'string', 'a default names a physical key code')
+      assert.ok(Array.isArray(binding.modifiers), 'a default names its modifiers')
+      assert.ok(binding.modifiers.includes('primary') && binding.modifiers.includes('alt'), 'defaults use primary+alt')
+    }
+  }
+
+  /* The fixture has the multiview panel active, so a command owns the keystroke here; the other
+     answer the dispatcher understands is 'pass', returned when another panel is showing. */
+  const answer = commands[0].resolve()
+  assert.equal(answer.status, 'handled', 'an active panel handles its own keystroke')
+  assert.equal(typeof answer.run, 'function', 'a handled answer carries the work to run')
+})

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.89 — 2026-11-11
+
+### 核对：快捷键注册契约（产品最核心的承诺）
+
+插件对外承诺"六个命令、全键盘操作"。如果注册形状不对，命令会**静默永不触发**，而本地测试因为
+假宿主是自己写的一路绿灯。用 asar 读宿主 `@deepseek-ai/dsh-client-shortcuts` 后确认：
+
+| 契约 | 宿主的实现 | 我们 |
+|---|---|---|
+| 默认键位的键名 | `definition.defaults[`${runtime}:${platform}`]` | `desktop:windows` 等 ✓ |
+| 标签 | `command.label()` 按函数调用 | `label: () => T(...)` ✓ |
+| 菜单派发 | `resolve({...context, source:'menu'})`，`status==='handled'` 才 `run()` | ✓ |
+| 键盘派发 | 先查 `regions.includes(context.region)`；**桌面 Windows/macOS 跳过该检查** | `regions: ['page','editable']` ✓ |
+| 模态 | `context.modal !== null && !command.modals.includes(modal)` 则不派发 | `modals: []` ✓（对话框打开时不抢键） |
+
+顺带确认：`web:*` 不给默认键位是**对的**——宿主对 web 组合键有白名单，声明了会在注册时失败并丢掉命令。
+
+### 验证
+
+- 新增测试（87 → 88）：断言每条命令的 `label` 是函数、`aliases` 是数组、`regions` 含 `page`、
+  `defaults` **只声明 desktop**、每个默认键位带 `primary+alt`、`resolve()` 在有面板时返回
+  `{status:'handled', run}`。
+- `docs/DESIGN.md` 契约表补上这一行。
+
+
+
 ## 0.1.88 — 2026-11-11
 
 ### 样式：视图计数徽标用了 8px 字，低于宿主的最小字号
