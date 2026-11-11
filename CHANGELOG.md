@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.1.82 — 2026-11-11
+
+### 核对：注意力规则用的状态契约，终于不是我的猜测
+
+这是本项目最大的潜在风险——`useSessionStatus` 给的字段名一直是我按记忆写的，如果宿主用的是别的名字，
+那么**注意力永不触发**，而假宿主（我写的）会一路绿灯。
+
+这次直接解析 `app.asar`（Electron 归档，用 8 字节头 + pickle 尺寸即可读出 JSON 索引），取出宿主
+`@deepseek-ai/dsh-client-ui-session/lib/client.js`，读到了它的 `publishStatus`：
+
+```js
+next.set(id, {
+  running: this.running.get(id),                     // boolean | undefined
+  pendingInteraction: this.pendingSnapshot.get(id),  // 交互对象 | undefined
+  completionUnread: this.completionUnread.has(id)    // boolean
+})
+```
+
+**契约与实现一致**，并由此确认三点：
+
+1. `pendingInteraction` 是**对象**不是标志位——用真值判断是对的；
+2. 等待中的会话**同时也在运行**——所以 `waiting` 必须先于 `running` 判定；
+3. 宿主已把**主视图**排除在 `completionUnread` 之外（`!this.isMain(...)`），因此原生视图正在看的对话不会被报成"有新结果"。
+
+### 顺带收紧一处
+
+原实现用 `pendingInteraction !== undefined` 判断等待，**`null` 会被误判成"等待中"**。宿主目前不会发 `null`，
+但把两种空值都排除更稳。
+
+### 验证
+
+- 测试 84 → 85：按宿主真实形状写断言（`running: undefined`、交互对象、`null`、空对象）。
+- `docs/DESIGN.md` 新增「Session status contract」一节，记录契约来源与三条推论——**让 fixture 不再是自我复述**。
+
+
+
 ## 0.1.81 — 2026-11-11
 
 ### 修复：一次网络抖动会让更新检查静默一整天
