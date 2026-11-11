@@ -423,3 +423,31 @@ test('a superseded search is aborted, and a failing search falls back to titles'
   assert.ok(note !== undefined, 'an empty result explains itself')
   assert.equal(textOf(note), 'pickEmpty', 'the state is "no match", not "still searching"')
 })
+
+test('a fresh answer with no hits clears them', async () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const answers = { wal: [{ sessionId: 's3', snippet: 'WAL discussion' }], zzz: [] }
+  const { stage, hook } = bootHost({
+    sessions: list,
+    search: (query) => Promise.resolve({ ok: true, value: { items: answers[query] ?? [], hasMore: false } }),
+  })
+  const harness = createHarness()
+  hook.bind('p1', null)
+  const picker = (tree) => byClass(tree, 'mv-picker')[0]
+  const render = () => harness.render(stage, searchProps(list))
+
+  let tree = render()
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'wal' } })
+  tree = render()
+  await new Promise((resolve) => setTimeout(resolve, 220))
+  tree = render()
+  assert.equal(byClass(picker(tree), 'mv-picker-item').length, 1, 'the hit is listed')
+
+  /* A later phrase with no hits must not leave the earlier hit on screen. */
+  byClass(picker(tree), 'mv-picker-search')[0].props.onChange({ target: { value: 'zzz' } })
+  tree = render()
+  await new Promise((resolve) => setTimeout(resolve, 220))
+  tree = render()
+  assert.equal(byClass(picker(tree), 'mv-picker-item').length, 0, 'stale hits are cleared by an empty answer')
+  assert.equal(textOf(byClass(picker(tree), 'mv-picker-empty')[0]), 'pickEmpty', 'and the list says there is no match')
+})
