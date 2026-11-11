@@ -1,6 +1,6 @@
 {
   "name": "dsh-multiview",
-  "version": "0.1.53",
+  "version": "0.1.54",
   "description": "2-4 real Chats you rearrange entirely from the keyboard, save as named layouts, and jump through by which pane needs you.",
   "type": "module",
   "license": "MIT",

@@ -1228,3 +1228,57 @@ test('the empty picker distinguishes "no conversations yet" from "no matches"', 
   })
   assert.equal(emptyTexts(withSessions).length, 0, 'with one Session the picker lists it instead of a message')
 })
+
+test('the stage bar shows which saved split is on stage', () => {
+  const two = (first, second) => ({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: first },
+    b: { kind: 'leaf', id: 'p2', sessionId: second },
+  })
+
+  const renderWith = (currentViewId, views) => {
+    const { context } = bootWithHook({
+      version: 3,
+      layout: two('s1', 's2'),
+      focused: 'p1',
+      preset: 2,
+      seeded: true,
+      currentViewId,
+      views,
+    })
+    const main = context.registered.find((entry) => entry.name === 'main')
+    return expand(
+      main.component({
+        renderSlot: () => null,
+        SessionProvider: ({ children }) => children,
+        useSessions: (selector) => selector(SESSIONS),
+        useSessionStatus: (selector) => selector(new Map()),
+      }),
+    )
+  }
+
+  const barNames = (tree) => {
+    const out = []
+    const walk = (node) => {
+      if (node == null || typeof node !== 'object') return
+      if (Array.isArray(node)) { node.forEach(walk); return }
+      if (node.props && node.props.className === 'mv-bar-view') {
+        for (const child of node.children ?? []) if (typeof child === 'string') out.push(child)
+      }
+      for (const child of node.children ?? []) walk(child)
+    }
+    walk(tree)
+    return out
+  }
+
+  const views = [{ id: 'v1', name: '盯盘 A 组', layout: two('s1', 's2'), savedAt: 1 }]
+
+  /* While a saved split is active, its name is visible without opening the popover. */
+  assert.deepEqual(barNames(renderWith('v1', views)), ['盯盘 A 组'], 'the active split name belongs in the bar')
+
+  /* On an ad-hoc split there is no saved split, so nothing extra appears. */
+  assert.deepEqual(barNames(renderWith(null, views)), [], 'an ad-hoc split shows no name')
+
+  /* A stale currentViewId (entry gone) must not render an empty label. */
+  assert.deepEqual(barNames(renderWith('gone', views)), [], 'a dangling currentViewId renders nothing')
+})

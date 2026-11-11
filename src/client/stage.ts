@@ -1055,6 +1055,11 @@ function MultiviewStage(props) {
   const maximizedLeaf = state.maximized === null ? null : mvLeafById(state.layout, state.maximized)
   const focusedLeaf = leaves.find((leaf) => leaf.id === state.focused) ?? leaves[0]
   const visibleLeaf = maximizedLeaf === null ? focusedLeaf : maximizedLeaf
+  const activeView =
+    state.currentViewId === null || state.currentViewId === undefined
+      ? null
+      : (state.views ?? []).find((view) => view.id === state.currentViewId) ?? null
+  const currentViewName = activeView === null ? null : String(activeView.name ?? '').trim() || null
   const body = h(
     'div',
     { className: 'mv-body', 'data-mv-body': '' },
@@ -1093,6 +1098,12 @@ function MultiviewStage(props) {
       'header',
       { className: 'mv-bar', 'data-window-drag': true },
       h('span', { className: 'mv-bar-title', title: mvHostTitle() }, T('title')),
+      /* Which saved split is on stage is state, not decoration: it appears only while one is
+         active. Without it the name is only visible inside the Views popover, so the user cannot
+         tell where they are after restoring a layout. */
+      currentViewName === null
+        ? null
+        : h('span', { className: 'mv-bar-view', title: currentViewName }, currentViewName),
       h(
         'div',
         { className: 'mv-seg', role: 'group', 'aria-label': T('shape') },

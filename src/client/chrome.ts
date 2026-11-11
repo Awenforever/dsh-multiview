@@ -13,6 +13,7 @@ const MV_CSS = `
 .mv-bar-title{font-size:13px;line-height:16px;font-weight:500;color:var(--dsw-alias-label-secondary);white-space:nowrap;margin-right:2px}
 .mv-strip{display:flex;flex-direction:row;align-items:center;gap:4px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:0 1 auto}
 .mv-strip::-webkit-scrollbar{display:none}
+.mv-bar-view{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:16px;color:var(--dsw-alias-label-secondary);padding-left:2px}
 .mv-bar-spacer{flex:1;min-width:0}
 .mv-seg{display:flex;align-items:center;gap:2px;flex:none}
 .mv-chip{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:24px;min-width:24px;padding:0 6px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:16px;cursor:pointer;white-space:nowrap}

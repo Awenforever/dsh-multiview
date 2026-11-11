@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.53';
+const MV_PLUGIN_VERSION = '0.1.54';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -1382,6 +1382,7 @@ const MV_CSS = `
 .mv-bar-title{font-size:13px;line-height:16px;font-weight:500;color:var(--dsw-alias-label-secondary);white-space:nowrap;margin-right:2px}
 .mv-strip{display:flex;flex-direction:row;align-items:center;gap:4px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:0 1 auto}
 .mv-strip::-webkit-scrollbar{display:none}
+.mv-bar-view{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:16px;color:var(--dsw-alias-label-secondary);padding-left:2px}
 .mv-bar-spacer{flex:1;min-width:0}
 .mv-seg{display:flex;align-items:center;gap:2px;flex:none}
 .mv-chip{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:24px;min-width:24px;padding:0 6px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:16px;cursor:pointer;white-space:nowrap}
@@ -2574,6 +2575,8 @@ function MultiviewStage(props) {
     const maximizedLeaf = state.maximized === null ? null : mvLeafById(state.layout, state.maximized);
     const focusedLeaf = leaves.find((leaf)=>leaf.id === state.focused) ?? leaves[0];
     const visibleLeaf = maximizedLeaf === null ? focusedLeaf : maximizedLeaf;
+    const activeView = state.currentViewId === null || state.currentViewId === undefined ? null : (state.views ?? []).find((view)=>view.id === state.currentViewId) ?? null;
+    const currentViewName = activeView === null ? null : String(activeView.name ?? '').trim() || null;
     const body = h('div', {
         className: 'mv-body',
         'data-mv-body': ''
@@ -2606,7 +2609,10 @@ function MultiviewStage(props) {
     }, h('span', {
         className: 'mv-bar-title',
         title: mvHostTitle()
-    }, T('title')), h('div', {
+    }, T('title')), currentViewName === null ? null : h('span', {
+        className: 'mv-bar-view',
+        title: currentViewName
+    }, currentViewName), h('div', {
         className: 'mv-seg',
         role: 'group',
         'aria-label': T('shape')
