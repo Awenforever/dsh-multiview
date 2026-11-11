@@ -588,3 +588,23 @@ test('a narrow stage shows one pane plus a switcher that carries status', () => 
   tree = render()
   assert.equal(byClass(tree, 'mv-pane').length, 3, 'widening restores the whole split')
 })
+
+test('the attention dot teaches the chord that walks between panes', () => {
+  const list = makeSessions(['s1', 's2'])
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  const statuses = new Map([['s1', { pendingInteraction: {} }]])
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  const tree = harness.render(stage, {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(statuses),
+  })
+
+  const dots = byClass(tree, 'mv-dot-action')
+  assert.equal(dots.length, 1, 'only the pane that needs the user gets a dot button')
+  assert.match(String(dots[0].props.title), /Mod\+Alt\+J$/, 'the dot tooltip names the chord')
+  assert.doesNotMatch(String(dots[0].props['aria-label']), /Mod\+Alt/, 'a screen reader hears the state, not the chord')
+})

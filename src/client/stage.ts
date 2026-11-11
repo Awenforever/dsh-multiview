@@ -495,7 +495,7 @@ function PaneFrame(props) {
             'data-state': dot,
             /* The dot is where a reader looks when a pane wants them, which makes it the one
                honest place to mention the chord that walks between such panes. */
-            title: mvDotLabel(dot) + ' 路 ' + mvShortcutHint('KeyJ'),
+            title: mvDotLabel(dot) + ' · ' + mvShortcutHint('KeyJ'),
             'aria-label': mvDotLabel(dot),
             onClick: () => surface.onFocus(leaf.id),
           }),

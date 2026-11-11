@@ -2283,7 +2283,7 @@ function PaneFrame(props) {
         type: 'button',
         className: 'mv-dot mv-dot-action',
         'data-state': dot,
-        title: mvDotLabel(dot) + ' 路 ' + mvShortcutHint('KeyJ'),
+        title: mvDotLabel(dot) + ' · ' + mvShortcutHint('KeyJ'),
         'aria-label': mvDotLabel(dot),
         onClick: ()=>surface.onFocus(leaf.id)
     }), h('span', {

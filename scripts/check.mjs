@@ -135,6 +135,9 @@ ok(
   'client.js version constant must equal package.json version',
 )
 ok(clientBytes < 160 * 1024, `client.js is ${clientBytes} bytes, over the 160 KiB budget`)
+  /* Encoding damage: a mis-decoded write turns a middle dot into a CJK character, which ships as a
+     visible wrong glyph. U+FFFD is the general signal that something was decoded badly. */
+  ok(!client.includes('\uFFFD'), 'client.js must not contain the replacement character (U+FFFD): the source was decoded badly')
 ok(/^export function apply\s*\(/m.test(host), 'index.js must export a Host apply')
 ok(readFileSync(join(ROOT, 'cordis.patch.yml'), 'utf8').includes("name: 'dsh-multiview'"), 'patch row must name the package')
 
