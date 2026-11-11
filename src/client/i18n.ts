@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.62'
+const MV_PLUGIN_VERSION = '0.1.63'
 
 const MV_ZH = {
   panel: '分屏',
