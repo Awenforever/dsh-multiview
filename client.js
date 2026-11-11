@@ -2399,7 +2399,7 @@ function MvViewsButton(props) {
         className: 'mv-views-count'
     }, String(views.length)) : null), open ? h('div', {
         className: 'mv-views-pop',
-        role: 'menu',
+        role: 'group',
         'aria-label': T('views')
     }, views.length === 0 ? h('div', {
         className: 'mv-views-empty'

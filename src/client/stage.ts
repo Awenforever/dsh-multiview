@@ -899,7 +899,10 @@ function MvViewsButton(props) {
     open
       ? h(
           'div',
-          { className: 'mv-views-pop', role: 'menu', 'aria-label': T('views') },
+          /* A disclosure popover, not a menu: each row carries several separate actions
+             (apply, rename, delete), which `menuitem` cannot express. Declaring `menu` here
+             would promise arrow-key menu semantics that plain buttons do not implement. */
+          { className: 'mv-views-pop', role: 'group', 'aria-label': T('views') },
           views.length === 0
             ? h('div', { className: 'mv-views-empty' }, T('viewsEmpty'))
             : views.map((view) =>

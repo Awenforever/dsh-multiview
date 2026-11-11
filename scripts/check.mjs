@@ -312,6 +312,24 @@ if (zhKeys !== null && enKeys !== null) {
   }
 }
 
+// ---- ARIA consistency ----------------------------------------------------------
+{
+  /* This plugin never owns a menu container: it contributes `menuitem`s into the host's own
+     menus (where the host supplies the role="menu" wrapper and the arrow-key handling). Declaring
+     our own `menu` would promise menu keyboard semantics that plain buttons do not implement —
+     which is exactly what the Views popover used to do. */
+  ok(
+    !/role:\s*'menu'/.test(client),
+    'client.js must not declare role="menu": the host owns menu containers, we only contribute items',
+  )
+
+  /* A modal dialog must say it is modal, otherwise assistive tech treats the rest of the page as
+     reachable while the backdrop blocks it. */
+  if (/role:\s*'dialog'/.test(client)) {
+    ok(/aria-modal/.test(client), 'a dialog must carry aria-modal when the backdrop blocks the page')
+  }
+}
+
 // ---- report -------------------------------------------------------------------
 if (failures.length > 0) {
   for (const message of failures) console.error('FAIL ' + message)
