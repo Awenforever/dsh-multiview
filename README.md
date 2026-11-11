@@ -63,6 +63,8 @@ The divider itself is a focusable separator: `←`/`→` (or `↑`/`↓` on a st
 - **Maximize needs a conversation.** An empty pane offers no ⤢: enlarging a picker would hide every other conversation.
 - **Old splits heal.** Applying a saved split whose Sessions were deleted or archived restores the shape and empties only those panes; the saved entry is kept (never silently deleted) and rewritten to what could actually be restored.
 
+See [docs/VERIFY-BY-HAND.md](docs/VERIFY-BY-HAND.md) for the checklist of behaviours that can only be confirmed in a real window.
+
 ## Not supported in v1 (on purpose)
 
 1. **File preview / diff inside a pane** — whenever any global panel is active, DSH unmounts the right sidebar's session surface (`no session surface is mounted`; shipped panels behave the same). Use ↗ to work in the native view.

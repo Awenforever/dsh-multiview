@@ -328,6 +328,16 @@ if (zhKeys !== null && enKeys !== null) {
   if (/role:\s*'dialog'/.test(client)) {
     ok(/aria-modal/.test(client), 'a dialog must carry aria-modal when the backdrop blocks the page')
   }
+  /* The by-hand checklist names the version it applies to. Without this guard it silently ages:
+     every release would leave it pointing at a build nobody can install any more. */
+  const checklistPath = join(ROOT, 'docs/VERIFY-BY-HAND.md')
+  if (existsSync(checklistPath)) {
+    const checklist = readFileSync(checklistPath, 'utf8')
+    ok(
+      checklist.includes(pkg.version),
+      `docs/VERIFY-BY-HAND.md must name the current version (${pkg.version}); update the checklist when releasing`,
+    )
+  }
 }
 
 // ---- report -------------------------------------------------------------------
