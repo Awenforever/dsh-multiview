@@ -32,11 +32,13 @@ function MultiviewPanelIcon(props: any) {
       : mvAttentionPanes(state.layout, (sessionId) => mvSessionState(statuses.get(sessionId))).length
   const label =
     count === 0 ? T('panel') : count === 1 ? T('panelAttentionOne') : T('panelAttention').replace('{count}', String(count))
+  /* With something waiting, the icon also says how to get there without opening the split. */
+  const iconTitle = count === 0 ? label : label + ' · ' + mvShortcutHint('KeyJ')
   /* 16×16 with the shipped rows' own stroke weight, so the glyph sits on the
      same optical grid as 插件 / 自动化任务 / 更多 instead of nudging the label. */
   return h(
     'span',
-    { className: 'mv-icon-badge-host', 'aria-label': label, role: count === 0 ? undefined : 'img' },
+    { className: 'mv-icon-badge-host', 'aria-label': label, title: iconTitle, role: count === 0 ? undefined : 'img' },
     h(
       'svg',
       { viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': true, fill: 'none' },
@@ -411,7 +413,9 @@ function PaneFrame(props) {
             type: 'button',
             className: 'mv-dot mv-dot-action',
             'data-state': dot,
-            title: mvDotLabel(dot),
+            /* The dot is where a reader looks when a pane wants them, which makes it the one
+               honest place to mention the chord that walks between such panes. */
+            title: mvDotLabel(dot) + ' 路 ' + mvShortcutHint('KeyJ'),
             'aria-label': mvDotLabel(dot),
             onClick: () => surface.onFocus(leaf.id),
           }),

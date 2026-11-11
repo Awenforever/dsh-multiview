@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.65';
+const MV_PLUGIN_VERSION = '0.1.66';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -1718,9 +1718,11 @@ function MultiviewPanelIcon(props) {
     const statuses = readStatuses === null ? null : readStatuses((snapshot)=>snapshot);
     const count = statuses === null || statuses === undefined || typeof statuses.get !== 'function' ? 0 : mvAttentionPanes(state.layout, (sessionId)=>mvSessionState(statuses.get(sessionId))).length;
     const label = count === 0 ? T('panel') : count === 1 ? T('panelAttentionOne') : T('panelAttention').replace('{count}', String(count));
+    const iconTitle = count === 0 ? label : label + ' · ' + mvShortcutHint('KeyJ');
     return h('span', {
         className: 'mv-icon-badge-host',
         'aria-label': label,
+        title: iconTitle,
         role: count === 0 ? undefined : 'img'
     }, h('svg', {
         viewBox: '0 0 16 16',
@@ -2048,7 +2050,7 @@ function PaneFrame(props) {
         type: 'button',
         className: 'mv-dot mv-dot-action',
         'data-state': dot,
-        title: mvDotLabel(dot),
+        title: mvDotLabel(dot) + ' 路 ' + mvShortcutHint('KeyJ'),
         'aria-label': mvDotLabel(dot),
         onClick: ()=>surface.onFocus(leaf.id)
     }), h('span', {
