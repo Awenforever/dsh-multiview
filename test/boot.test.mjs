@@ -278,6 +278,22 @@ test('the client bundle boots, installs its slots and renders the stage', () => 
   assert.equal(countClass(rendered, 'mv-pane-body'), 2, 'pane bodies are missing')
 })
 
+/** Every pane in the current split, in reading order. */
+function leavesOf(hook) {
+  const out = []
+  const walk = (node) => {
+    if (node === null || node === undefined) return
+    if (node.kind === 'leaf') {
+      out.push(node)
+      return
+    }
+    walk(node.a)
+    walk(node.b)
+  }
+  walk(hook.state().layout)
+  return out
+}
+
 /** Depth-first search for element nodes carrying one class name. */
 function findByClass(node, className, out = []) {
   if (node == null || typeof node !== 'object') return out
@@ -366,8 +382,8 @@ test('the sidebar icon badges attention, and stays quiet when nothing needs you'
  * @param seed - optional persisted multiview payload.
  * @returns the debug hook plus the host objects.
  */
-function bootWithHook(seed) {
-  const dom = installDom(seed === undefined ? {} : { 'dsh.multiview.v1': JSON.stringify(seed) })
+function bootWithHook(seed, rawSeed) {
+  const dom = installDom(rawSeed !== undefined ? { 'dsh.multiview.v1': rawSeed } : seed === undefined ? {} : { 'dsh.multiview.v1': JSON.stringify(seed) })
   const context = createContext()
   let loaded = null
   const host = globalThis
@@ -502,4 +518,127 @@ test('a profile saved by an older build is de-duplicated on load', () => {
   const state = hook.state()
   assert.equal(state.views.length, 1, 'two arrangements of the same Sessions must collapse to one entry on load')
   assert.equal(state.views[0].id, 'swapped', 'the newer entry wins when neither carries a typed name')
+})
+
+test('edge cases of the shipped store', () => {
+  const { hook } = bootWithHook()
+
+  /* a Session appears at most once, and binding moves it into the target pane */
+  hook.shape(2)
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's1')
+  const afterMove = leavesOf(hook)
+  assert.equal(afterMove.filter((leaf) => leaf.sessionId === 's1').length, 1, 'a Session may not sit in two panes')
+  assert.equal(afterMove.find((leaf) => leaf.id === 'p2').sessionId, 's1', 'binding moves the Session to the target pane')
+  assert.equal(afterMove.find((leaf) => leaf.id === 'p1').sessionId, null, 'the source pane is cleared by the move')
+  hook.bind('p2', null)
+  assert.deepEqual(leavesOf(hook).map((leaf) => leaf.sessionId), [null, null], 'binding null clears the pane')
+
+  /* resize stays inside the documented band */
+  hook.resize('s1', 0.05)
+  assert.equal(hook.state().layout.ratio, 0.22, 'resize clamps low')
+  hook.resize('s1', 0.95)
+  assert.equal(hook.state().layout.ratio, 0.78, 'resize clamps high')
+
+  /* pane count stays inside 2..4 */
+  hook.shape(1)
+  assert.equal(leavesOf(hook).length, 2, 'shape(1) clamps to two panes')
+  hook.shape(9)
+  assert.equal(leavesOf(hook).length, 4, 'shape(9) clamps to four panes')
+
+  /* removing a bound pane keeps the shape and leaves a hole */
+  hook.shape(3)
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  hook.bind('p3', 's3')
+  hook.remove('p2')
+  assert.equal(leavesOf(hook).length, 3, 'removing a bound pane keeps the pane count')
+  assert.deepEqual(leavesOf(hook).map((leaf) => leaf.sessionId), ['s1', null, 's3'], 'the removed pane is the only empty one')
+
+  /* swapping with an empty pane moves the Session, not a null */
+  hook.swap('p1', 'p2')
+  assert.deepEqual(leavesOf(hook).map((leaf) => leaf.sessionId), [null, 's1', 's3'], 'swap with an empty pane moves the Session')
+
+  /* maximize is cleared by anything that changes what is visible */
+  hook.maximize('p2')
+  assert.equal(hook.state().maximized, 'p2', 'maximize records the pane')
+  hook.swap('p2', 'p3')
+  assert.equal(hook.state().maximized, null, 'swap clears maximize')
+  hook.maximize('p1')
+  hook.remove('p1')
+  assert.equal(hook.state().maximized, null, 'removing the maximized pane clears maximize')
+
+  /* neighbour wraps in reading order */
+  hook.shape(3)
+  assert.equal(hook.neighbour('p3', 1), 'p1', 'neighbour wraps forward')
+  assert.equal(hook.neighbour('p1', -1), 'p3', 'neighbour wraps backward')
+
+  /* rename is bounded */
+  hook.shape(2)
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  const viewId = hook.state().views[0].id
+  hook.renameView(viewId, 'x'.repeat(200))
+  assert.equal(hook.state().views[0].name.length, 60, 'a very long name is truncated')
+})
+
+test('a corrupted or impossible saved state is repaired on load', () => {
+  /* Garbage JSON must not throw, and must still leave a usable split. */
+  const garbage = bootWithHook(undefined, '{not json at all').hook
+  assert.ok(leavesOf(garbage).length >= 2, 'corrupt saved state still boots into a split')
+
+  const split = (ratio, panes) => {
+    let node = { kind: 'leaf', id: panes[panes.length - 1].id, sessionId: panes[panes.length - 1].sessionId }
+    for (let index = panes.length - 2; index >= 0; index -= 1) {
+      node = { kind: 'split', id: 's' + (index + 1), dir: 'col', ratio, a: { kind: 'leaf', id: panes[index].id, sessionId: panes[index].sessionId }, b: node }
+    }
+    return node
+  }
+  const seedOf = (layout) => JSON.stringify({ version: 3, layout, focused: 'p1', preset: 4, seeded: true, views: [], currentViewId: null })
+
+  /* Five panes exceed the cap. */
+  const five = bootWithHook(undefined, seedOf(split(0.5, [
+    { id: 'p1', sessionId: 's1' },
+    { id: 'p2', sessionId: 's2' },
+    { id: 'p3', sessionId: 's3' },
+    { id: 'p4', sessionId: null },
+    { id: 'p5', sessionId: null },
+  ]))).hook
+  assert.equal(leavesOf(five).length, 4, 'a saved split with five panes is truncated to four')
+
+  /* The mirror shape: a right-deep chain must not collapse to its single leaf either. */
+  const rightDeep = bootWithHook(undefined, seedOf({
+    kind: 'split', id: 's1', dir: 'col', ratio: 0.5,
+    a: { kind: 'split', id: 's2', dir: 'col', ratio: 0.5,
+      a: { kind: 'split', id: 's3', dir: 'col', ratio: 0.5,
+        a: { kind: 'split', id: 's4', dir: 'col', ratio: 0.5,
+          a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+          b: { kind: 'leaf', id: 'p2', sessionId: 's2' } },
+        b: { kind: 'leaf', id: 'p3', sessionId: 's3' } },
+      b: { kind: 'leaf', id: 'p4', sessionId: null } },
+    b: { kind: 'leaf', id: 'p5', sessionId: null },
+  })).hook
+  assert.equal(leavesOf(rightDeep).length, 4, 'a right-deep five-pane split keeps four panes, not one')
+
+  /* Duplicate pane ids would collide as React keys. */
+  const dup = bootWithHook(undefined, seedOf({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'leaf', id: 'p1', sessionId: 's2' },
+  })).hook
+  const ids = leavesOf(dup).map((leaf) => leaf.id)
+  assert.equal(new Set(ids).size, ids.length, 'duplicate pane ids are re-issued')
+
+  /* A hand-edited ratio outside the band. */
+  const wild = bootWithHook(undefined, seedOf({
+    kind: 'split', id: 's1', dir: 'row', ratio: 9,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+  })).hook
+  assert.equal(wild.state().layout.ratio, 0.78, 'a nonsense ratio is clamped on load')
+
+  /* A saved single pane is below the two-pane minimum and must be widened, not kept. */
+  const lonely = bootWithHook(undefined, seedOf({ kind: 'leaf', id: 'p1', sessionId: 's1' })).hook
+  assert.equal(leavesOf(lonely).length, 2, 'a saved single pane is widened to two')
+  assert.equal(leavesOf(lonely)[0].sessionId, 's1', 'the saved Session keeps its place when widening')
 })

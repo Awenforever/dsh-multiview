@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.40';
+const MV_PLUGIN_VERSION = '0.1.41';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -504,6 +504,7 @@ function mvNormalizeIds(node, seen) {
     };
 }
 function mvSanitize(raw) {
+    let overflowed = false;
     const walk = (value, depth)=>{
         if (depth > 8) return null;
         if (mvIsLeaf(value)) return {
@@ -516,7 +517,10 @@ function mvSanitize(raw) {
         const b = walk(value.b, depth + 1);
         if (a === null || b === null) return null;
         const leaves = mvLeaves(a).length + mvLeaves(b).length;
-        if (leaves > MV_MAX_PANES) return a;
+        if (leaves > MV_MAX_PANES) {
+            overflowed = true;
+            return mvLeaves(a).length >= mvLeaves(b).length ? a : b;
+        }
         return {
             kind: 'split',
             id: value.id,
@@ -528,7 +532,15 @@ function mvSanitize(raw) {
     };
     const tree = walk(raw, 0);
     if (tree === null) return null;
-    if (tree.kind === 'leaf') return tree;
+    if (overflowed && mvLeaves(tree).length < 2) {
+        return mvPreset(2);
+    }
+    if (tree.kind === 'leaf') {
+        const widened = mvPreset(2);
+        const leaves = mvLeaves(widened);
+        leaves[0].sessionId = tree.sessionId ?? null;
+        return widened;
+    }
     return mvNormalizeIds(tree, new Set());
 }
 function mvReconcileTree(node, reconcile) {

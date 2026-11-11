@@ -363,6 +363,10 @@ export function mvNormalizeIds(node: any, seen: Set<string>): any {
  * @returns a usable tree, or null when nothing usable was supplied.
  */
 export function mvSanitize(raw: any): any {
+  /* Overflow is not "keep the left subtree": for a left-deep chain that subtree is a single
+     leaf, so a five-pane saved layout used to collapse to one pane. Instead remember that the
+     tree was too big and rebuild a standard shape holding the first panes, in reading order. */
+  let overflowed = false
   const walk = (value: any, depth: number): any => {
     if (depth > 8) return null
     if (mvIsLeaf(value)) return { kind: 'leaf', id: value.id, sessionId: value.sessionId }
@@ -371,12 +375,27 @@ export function mvSanitize(raw: any): any {
     const b = walk(value.b, depth + 1)
     if (a === null || b === null) return null
     const leaves = mvLeaves(a).length + mvLeaves(b).length
-    if (leaves > MV_MAX_PANES) return a
+    if (leaves > MV_MAX_PANES) {
+      overflowed = true
+      /* Keep the side that holds more panes. Always keeping `b` would collapse a right-deep
+         chain to its single leaf, and always keeping `a` would lose everything to the left. */
+      return mvLeaves(a).length >= mvLeaves(b).length ? a : b
+    }
     return { kind: 'split', id: value.id, dir: value.dir, ratio: mvClampRatio(value.ratio), a, b }
   }
   const tree = walk(raw, 0)
   if (tree === null) return null
-  if (tree.kind === 'leaf') return tree
+  if (overflowed && mvLeaves(tree).length < 2) {
+    /* Nothing usable survived the cut, so fall back to a sane default rather than one pane. */
+    return mvPreset(2)
+  }
+  if (tree.kind === 'leaf') {
+    /* A saved single pane is below the two-pane minimum this product supports. */
+    const widened = mvPreset(2)
+    const leaves = mvLeaves(widened)
+    leaves[0].sessionId = tree.sessionId ?? null
+    return widened
+  }
   return mvNormalizeIds(tree, new Set())
 }
 
