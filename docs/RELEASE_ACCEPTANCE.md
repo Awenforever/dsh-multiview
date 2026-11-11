@@ -70,6 +70,24 @@
 
 窄窗分支无法用假宿主触达（它由 `ResizeObserver` 回调设置），因此窄窗仍靠真机实测覆盖，这一点在此写明而不是略过。
 
+## 1.7 安全面（`npm run check` 的一部分）
+
+插件能碰到宿主的页面与网络，所以"不需要的能力"应当被构建期拒绝，而不是靠自觉：
+
+| 检查 | 当前实测 |
+|---|---|
+| 动态代码执行（`eval(`、`new Function`） | 0 |
+| HTML 字符串注入（`innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write`） | 0 |
+| 原始网络原语（`XMLHttpRequest`、`WebSocket`） | 0 |
+| 编解码（`atob`/`btoa`）、cookie（`document.cookie`）、跨帧（`postMessage`）、`Authorization` 头 | 0 |
+| 外部地址 | **仅 1 个**：`https://registry.npmjs.org/dsh-multiview/latest`，且 `credentials: 'omit'`、`referrerPolicy: 'no-referrer'` |
+| 本地存储键 | **仅 2 个**：`dsh.multiview.v1`（布局）、`dsh.multiview.update.v1`（更新缓存） |
+
+说明两处需要澄清的地方：
+
+- **更新操作会 POST**，目标是**相对路径** `/dsh-market/api/v1/updates`（同源，即宿主自己的本地服务），请求体只有 `{"packageName":"dsh-multiview"}`。它不携带第三方凭据，也无法指向外部域——绝对地址会被上面的守卫直接拒绝。
+- 之前的市场评审对这一区域的结论是 PASS，本轮在新增功能后**重新审计**而非沿用旧结论。
+
 ## 2.1 win11-test 真机（DSH 0.2.2-rc.1，真实 Electron 应用）
 
 安装路径：`C:\Users\Administrator\.dsh\profiles\desktop\node_modules\dsh-multiview`，profile 的 `dependencies` 与 `dsh.profile.bundles` 各加一条；装前备份 `package.json` / `cordis.patch.yml` 为 `*.bak-20261105-0951-multiview`。

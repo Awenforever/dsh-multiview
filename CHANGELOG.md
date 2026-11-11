@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.1.53 — 2026-11-11
+
+### 安全面重新审计 + 守卫
+
+新增功能后再审计一次（不沿用旧结论），结论干净，并把"不需要的能力"变成构建期拒绝：
+
+| 检查 | 实测 |
+|---|---|
+| `eval(` / `new Function` | 0 |
+| `innerHTML` / `outerHTML` / `insertAdjacentHTML` / `document.write` | 0 |
+| `XMLHttpRequest` / `WebSocket` | 0 |
+| `atob` / `btoa` / `document.cookie` / `postMessage` / `Authorization` | 0 |
+| 外部地址 | 仅 `https://registry.npmjs.org/dsh-multiview/latest`（`credentials: omit` + `no-referrer`） |
+| 本地存储键 | 仅 `dsh.multiview.v1` 与 `dsh.multiview.update.v1` |
+
+两处需要说明：
+
+- **更新操作确实会 POST**，但目标是**相对路径** `/dsh-market/api/v1/updates`（同源、宿主本地服务），请求体只有 `{"packageName":"dsh-multiview"}`；绝对外部地址会被守卫直接拒绝。
+- 守卫覆盖：禁用清单逐项断言、外部地址白名单（只许注册表）、存储键白名单。
+
+### 验证
+
+- 变异验证：注入 `eval()` → FAIL；注入第二个外部域名 → FAIL；读取 `document.cookie` → FAIL；恢复后通过。
+- 文档：`docs/RELEASE_ACCEPTANCE.md` 新增 §1.7。
+
+### 说明
+
+- 运行代码未改（`client.js` 仍为 113569 字节）。
+- 未在 VM 验证：VM 仍停在 `Web authentication failed`（R32）。
+
+
 ## 0.1.52 — 2026-11-11
 
 ### 审计与守卫：发布卫生

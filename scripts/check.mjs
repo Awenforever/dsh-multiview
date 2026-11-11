@@ -272,6 +272,46 @@ if (zhKeys !== null && enKeys !== null) {
   }
 }
 
+// ---- security surface ----------------------------------------------------------
+{
+  /* Everything below is a capability this plugin does not need. If one ever appears, it must be
+     a deliberate decision with a review, not a side effect of a feature branch. */
+  const forbidden = [
+    ['eval(', 'dynamic code evaluation'],
+    ['new Function', 'dynamic code construction'],
+    ['innerHTML', 'HTML string injection'],
+    ['outerHTML', 'HTML string injection'],
+    ['insertAdjacentHTML', 'HTML string injection'],
+    ['document.write', 'document-stream injection'],
+    ['XMLHttpRequest', 'raw XHR'],
+    ['WebSocket', 'a socket this plugin never opens'],
+    ['atob', 'base64 decoding of payloads'],
+    ['btoa', 'base64 encoding of payloads'],
+    ['document.cookie', 'cookie access'],
+    ['postMessage', 'cross-frame messaging'],
+    ['Authorization', 'an auth header this plugin never sends'],
+  ]
+  for (const [needle, why] of forbidden) {
+    ok(!client.includes(needle), `client.js must not contain ${needle} (${why})`)
+  }
+
+  /* Exactly one external origin may be contacted, and it is the read-only registry lookup. */
+  const externalUrls = [...new Set((client.match(/https?:\/\/[^\s"'`)<]+/g) ?? []))]
+  for (const url of externalUrls) {
+    ok(
+      url.startsWith('https://registry.npmjs.org/'),
+      `client.js references an unexpected external URL (${url}); add it to the audit or remove it`,
+    )
+  }
+  notes.push(`${externalUrls.length} external URL(s), all registry reads`)
+
+  /* Writes only to our own storage keys. */
+  const storageKeys = [...new Set((client.match(/dsh\.multiview[a-zA-Z0-9._]*/g) ?? []))]
+  for (const key of storageKeys) {
+    ok(key === 'dsh.multiview.v1' || key === 'dsh.multiview.update.v1', `unexpected storage key ${key}`)
+  }
+}
+
 // ---- report -------------------------------------------------------------------
 if (failures.length > 0) {
   for (const message of failures) console.error('FAIL ' + message)
