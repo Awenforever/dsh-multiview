@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.95';
+const MV_PLUGIN_VERSION = '0.1.96';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -941,7 +941,7 @@ function mvSyncView(next) {
 function mvCommit(produce) {
     const produced = produce(mvState);
     if (produced === mvState || produced === null || produced === undefined) return;
-    mvState = mvSyncView(produced);
+    mvState = mvKeepFocusVisible(mvSyncView(produced));
     mvScheduleSave();
     for (const listener of mvListeners){
         try {
@@ -1105,7 +1105,6 @@ function mvBind(leafId, sessionId) {
     mvCommit((current)=>{
         const layout = mvWithSession(current.layout, leafId, sessionId);
         if (layout === current.layout) return current;
-        const focused = sessionId === null ? current.focused : leafId;
         let maximized = current.maximized;
         if (maximized !== null) {
             const before = mvLeafById(current.layout, maximized);
@@ -1113,6 +1112,7 @@ function mvBind(leafId, sessionId) {
             const unchanged = before !== null && after !== null && before.sessionId === after.sessionId;
             if (!unchanged) maximized = null;
         }
+        const focused = sessionId === null || maximized !== null && maximized !== leafId ? current.focused : leafId;
         return {
             ...current,
             layout,
@@ -1125,6 +1125,15 @@ function mvValidMaximized(maximized, layout) {
     if (maximized === null || maximized === undefined) return null;
     const leaf = mvLeafById(layout, maximized);
     return leaf === null || leaf.sessionId === null ? null : maximized;
+}
+function mvKeepFocusVisible(next) {
+    const maximized = next.maximized;
+    if (maximized === null || maximized === undefined) return next;
+    if (next.focused === maximized) return next;
+    return {
+        ...next,
+        maximized: null
+    };
 }
 function mvFocus(leafId) {
     mvCommit((current)=>{

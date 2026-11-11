@@ -1082,6 +1082,9 @@ test('the maximize claim survives only while its pane keeps its Session', () => 
   undisturbed.maximize('p2')
   undisturbed.bind('p3', 's3')
   assert.equal(undisturbed.state().maximized, 'p2', 'binding an unrelated pane must not drop the claim')
+  /* ...and focus stays on the pane the user is watching, because every keyboard action lands on the
+     focused pane and the other one is not on screen. */
+  assert.equal(undisturbed.state().focused, 'p2', 'focus stays on the pane the user is watching')
 
   /* Switching to another saved split drops it too. */
   const switched = bootWithHook({

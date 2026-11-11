@@ -229,7 +229,7 @@ function mvSyncView(next: any): any {
 function mvCommit(produce: (current: any) => any): void {
   const produced = produce(mvState)
   if (produced === mvState || produced === null || produced === undefined) return
-  mvState = mvSyncView(produced)
+  mvState = mvKeepFocusVisible(mvSyncView(produced))
   mvScheduleSave()
   for (const listener of mvListeners) {
     try {
@@ -425,7 +425,6 @@ function mvBind(leafId: string, sessionId: string | null): void {
   mvCommit((current) => {
     const layout = mvWithSession(current.layout, leafId, sessionId)
     if (layout === current.layout) return current
-    const focused = sessionId === null ? current.focused : leafId
     /* Binding can also clear the *other* pane that held this Session. If the maximized pane was
        that one, its content just vanished: keeping the claim would show an empty maximized window
        while the conversation the user was watching hides in a pane that is not rendered. So the
@@ -437,6 +436,11 @@ function mvBind(leafId: string, sessionId: string | null): void {
       const unchanged = before !== null && after !== null && before.sessionId === after.sessionId
       if (!unchanged) maximized = null
     }
+    /* Focus follows the action, unless that would take it off the maximized pane — which is exactly
+       the case where the claim survived. The pane the user is watching stays the pane the keyboard
+       acts on. */
+    const focused =
+      sessionId === null || (maximized !== null && maximized !== leafId) ? current.focused : leafId
     return { ...current, layout, focused, maximized }
   })
 }
@@ -452,6 +456,20 @@ function mvValidMaximized(maximized: string | null, layout: any): string | null 
   if (maximized === null || maximized === undefined) return null
   const leaf = mvLeafById(layout, maximized)
   return leaf === null || leaf.sessionId === null ? null : maximized
+}
+
+/**
+ * Only the maximized pane is on screen, so focus may never sit anywhere else.
+ *
+ * Every mutation that moves focus or plants a maximized claim passes through `mvCommit`, so the rule
+ * is enforced once here instead of at each call site — `mvFocus` and `mvBind` each had their own
+ * version, and a third path would have had to remember a third time.
+ */
+function mvKeepFocusVisible(next: any): any {
+  const maximized = next.maximized
+  if (maximized === null || maximized === undefined) return next
+  if (next.focused === maximized) return next
+  return { ...next, maximized: null }
 }
 
 /**
