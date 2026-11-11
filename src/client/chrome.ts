@@ -114,7 +114,7 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-row-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-row-action[data-active="true"]{color:var(--dsw-alias-state-business-primary)}
 .mv-row-action:focus-visible{outline:1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));outline-offset:2px}
-.mv-menu-row{display:flex;flex-direction:row;align-items:center;gap:6px;width:100%;min-height:34px;padding:6px 8px;border:none;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
+.mv-menu-row{display:flex;align-items:center;gap:6px;width:100%;min-height:34px;padding:6px 8px;border:none;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
 .mv-menu-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-menu-row:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
 .mv-icon-badge-host{position:relative;display:inline-flex;align-items:center;justify-content:center}

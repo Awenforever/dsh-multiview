@@ -5,7 +5,7 @@
  * Runs with no dependencies and exits non-zero on the first failing check so CI
  * (or a human) can rely on it before packing.
  */
-import { readFileSync, statSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -244,6 +244,18 @@ if (zhKeys !== null && enKeys !== null) {
       .map((match) => Number(match[1]))
       .filter((value) => value < 10)
     ok(tiny.length === 0, `no text may be smaller than the host's 10px minimum (found ${tiny.join(', ')}px)`)
+  }
+
+  /* A test file missing from the test script never runs, and nothing reports the omission. */
+  {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    const script = packageJson.scripts.test
+    const testFiles = readdirSync(new URL('../test', import.meta.url))
+      .filter((name) => /\.test\.(mjs|ts)$/.test(name))
+      .map((name) => `test/${name}`)
+    for (const file of testFiles) {
+      ok(script.includes(file), `${file} must be listed in the npm test script, or it never runs`)
+    }
   }
 
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
