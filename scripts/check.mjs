@@ -184,6 +184,22 @@ if (zhKeys !== null && enKeys !== null) {
     ok(zhList.includes(key), `T('${key}') is not in the zh dictionary, so it would render as the raw key`)
     ok(enList.includes(key), `T('${key}') is not in the en dictionary, so it would render as the raw key`)
   }
+  /* The injected menu row must keep the host's own item geometry
+     (`._item_1p5el_105` in dsh-web-frontend): any drift shows up as a misaligned row beside native
+     items. Values are copied from that rule, so assert them rather than trusting memory. */
+  const menuRow = /\.mv-menu-row\{([^}]*)\}/.exec(client)
+  ok(menuRow !== null, 'the row menu item must have a style rule')
+  if (menuRow !== null) {
+    for (const [declaration, reason] of [
+      ['gap:6px', 'the host menu item uses a 6px gap'],
+      ['padding:6px 8px', 'the host menu item pads 6px by 8px'],
+      ['min-height:34px', 'the host menu item is at least 34px tall'],
+      ['line-height:20px', 'the host menu item uses a 20px line box'],
+    ]) {
+      ok(menuRow[1].includes(declaration), `.mv-menu-row must declare ${declaration} (${reason})`)
+    }
+  }
+
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 

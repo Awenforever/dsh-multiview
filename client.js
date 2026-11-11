@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.83';
+const MV_PLUGIN_VERSION = '0.1.84';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -1673,7 +1673,7 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-row-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-row-action[data-active="true"]{color:var(--dsw-alias-state-business-primary)}
 .mv-row-action:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
-.mv-menu-row{display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;text-align:left;cursor:pointer;border-radius:6px}
+.mv-menu-row{display:flex;flex-direction:row;align-items:center;gap:6px;width:100%;min-height:34px;padding:6px 8px;border:none;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
 .mv-menu-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-menu-row:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
 .mv-icon-badge-host{position:relative;display:inline-flex;align-items:center;justify-content:center}
@@ -1732,7 +1732,7 @@ const MV_ICON = {
     pause: 'M6 3.5v9M10 3.5v9',
     play: 'M6 3.6v8.8L12.6 8z',
     views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8',
-    split: 'M2.4 3.4h4.4v9.2H2.4zM9.2 3.4h4.4v9.2H9.2z'
+    split: 'M2.6 3.4h10.8v9.2H2.6zM8 3.4v9.2'
 };
 function mvHostTitle() {
     const fallback = T('title');

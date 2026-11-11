@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.1.84 — 2026-11-11
+
+### 修复：会话行菜单里「在分屏中打开」与原生菜单错位
+
+用户报的问题：在会话行的 `…` 菜单里，插件加的那一行**图标和文字都和原生项对不齐**。
+
+用 asar 读到宿主自己的菜单项样式（`._item_1p5el_105`，`dsh-web-frontend`）：
+
+```css
+display:flex; align-items:center; gap:6px; width:100%;
+min-height:34px; padding:6px 8px; border-radius:var(--dsw-radius-md);
+font-size:13px; line-height:20px
+```
+
+我们写的是 `gap:8px; padding:7px 10px`，且没有 `min-height` 与 `line-height`——所以那一行整体向右偏约 2px、
+文字被推右约 6px、行高也与邻居不同。现在逐项对齐；`font:inherit` 换成显式的
+`font-family:inherit; font-size:13px; line-height:20px`，避免简写把行高一起重置。
+
+### 图标重量也改了
+
+原来的 `split` 图标是两个**近似实心**的窄矩形（3.4px 宽的框配 1.4px 描边，中间几乎填满），
+在一排描边图标里显得又重又黑。改成**一个外框 + 中间分隔线**：
+
+```
+M2.6 3.4h10.8v9.2H2.6zM8 3.4v9.2
+```
+
+同样的 1.4px 描边下，视觉重量与宿主的复制、文件夹、归档图标一致。侧栏面板图标同源，一并变轻。
+
+### 验证
+
+- 新增构建守卫：`.mv-menu-row` 必须声明 `gap:6px`、`padding:6px 8px`、`min-height:34px`、
+  `line-height:20px`，并在注释里写明数值来自宿主哪条规则——**靠记忆对齐的事以后由构建拦住**。
+- 变异验证四项全部失败（回到 8px gap、padding 回到 7×10、删掉 min-height、删掉 line-height）；
+  第一版变异有两项"打偏"（全局替换命中了别的规则），改成**只在 `.mv-menu-row` 规则体内替换**后才真正咬住。
+- 测试 86/86、`check.mjs` 通过。
+
+### 未验证
+
+真实宿主里的视觉效果要等下次重启加载 0.1.84 才能确认；数值是从宿主样式表读出来的，不是估的。
+
+
+
 ## 0.1.83 — 2026-11-11
 
 ### 核对：把剩下的宿主契约也验了
