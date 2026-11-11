@@ -195,6 +195,15 @@ function apply(ctx) {
     },
   })
   mvRegisterShortcut(ctx, {
+    id: 'multiview.pane.swapNext',
+    labelKey: 'shortcutSwapNext',
+    code: 'KeyS',
+    run: () => {
+      const state = mvGetState()
+      mvSwapWithNeighbour(state.focused, 1)
+    },
+  })
+  mvRegisterShortcut(ctx, {
     id: 'multiview.pane.maximize',
     labelKey: 'shortcutMaximize',
     code: 'KeyM',

@@ -27,7 +27,7 @@ A "Split" icon appears in the left panel list; click it to turn the central colu
 | Open / close | The "Split" icon in the sidebar panel list |
 | 2 / 3 / 4 panes | The `2` `3` `4` chips in the stage bar |
 | Resize | Drag the divider between panes |
-| Swap two panes | Drag a pane **title** onto another pane |
+| Swap two panes | Drag a pane **title** onto another pane, or `Mod+Alt+S` to swap with the next one |
 | Maximize / restore | The ⤢ button in the pane header; the stage bar shows "Restore" |
 | Bind an empty pane | Search and pick a session right inside the pane |
 | Put any session into the split | Hover a **session row** in the sidebar → the split button; or the row's `…` menu → "Open in split view". Nothing leaves the split: an empty pane is filled, a new pane is added under the four-pane cap, and only a full split replaces the focused pane |
@@ -43,6 +43,7 @@ Shortcuts (module defaults; rebind in **Settings → Shortcuts**):
 |---|---|
 | Focus previous / next pane | `Mod+Alt+[` / `Mod+Alt+]` |
 | Jump to the pane that needs you | `Mod+Alt+J` |
+| Swap places with the next pane | `Mod+Alt+S` |
 | Maximize or restore the focused pane | `Mod+Alt+M` |
 | Remove the focused pane from the split | `Mod+Alt+W` |
 

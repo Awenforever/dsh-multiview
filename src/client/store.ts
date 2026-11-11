@@ -379,6 +379,21 @@ function mvResizeSplit(splitId: string, ratio: number): void {
   })
 }
 
+/**
+ * Exchange the focused pane's Session with its neighbour, wrapping around.
+ *
+ * Swapping was pointer-only, which made the arrangement incomplete for keyboard users
+ * in a plugin whose point is keyboard parity.
+ * @param leafId - pane to move.
+ * @param delta - +1 for the next pane in reading order, -1 for the previous one.
+ */
+function mvSwapWithNeighbour(leafId: string, delta: number): void {
+  const state = mvGetState()
+  const other = mvNeighbour(state.layout, leafId, delta)
+  if (other === leafId) return
+  mvSwapLeaves(leafId, other)
+}
+
 /** Exchange two panes' Sessions. */
 function mvSwapLeaves(aId: string, bId: string): void {
   mvCommit((current) => {

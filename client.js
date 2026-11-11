@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.31';
+const MV_PLUGIN_VERSION = '0.1.32';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -77,6 +77,7 @@ const MV_ZH = {
     shortcutFocusNext: '聚焦下一格',
     shortcutAttention: '跳到下一个需要你处理的格',
     shortcutMaximize: '最大化或还原当前格',
+    shortcutSwapNext: '和下一格交换位置',
     shortcutRemove: '从分屏移除当前格'
 };
 const MV_EN = {
@@ -144,6 +145,7 @@ const MV_EN = {
     shortcutFocusNext: 'Focus next pane',
     shortcutAttention: 'Jump to the pane that needs you',
     shortcutMaximize: 'Maximize or restore the current pane',
+    shortcutSwapNext: 'Swap places with the next pane',
     shortcutRemove: 'Remove the current pane from the split'
 };
 let PTX = null;
@@ -817,6 +819,12 @@ function mvResizeSplit(splitId, ratio) {
             layout
         };
     });
+}
+function mvSwapWithNeighbour(leafId, delta) {
+    const state = mvGetState();
+    const other = mvNeighbour(state.layout, leafId, delta);
+    if (other === leafId) return;
+    mvSwapLeaves(leafId, other);
 }
 function mvSwapLeaves(aId, bId) {
     mvCommit((current)=>{
@@ -2670,6 +2678,15 @@ function apply(ctx) {
             const state = mvGetState();
             const next = mvNextAttention(state, mvStatusSnapshot());
             if (next !== null) mvFocusPane(next);
+        }
+    });
+    mvRegisterShortcut(ctx, {
+        id: 'multiview.pane.swapNext',
+        labelKey: 'shortcutSwapNext',
+        code: 'KeyS',
+        run: ()=>{
+            const state = mvGetState();
+            mvSwapWithNeighbour(state.focused, 1);
         }
     });
     mvRegisterShortcut(ctx, {

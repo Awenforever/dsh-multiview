@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.31'
+const MV_PLUGIN_VERSION = '0.1.32'
 
 const MV_ZH = {
   panel: '分屏',
@@ -77,6 +77,7 @@ const MV_ZH = {
   shortcutFocusNext: '聚焦下一格',
   shortcutAttention: '跳到下一个需要你处理的格',
   shortcutMaximize: '最大化或还原当前格',
+  shortcutSwapNext: '和下一格交换位置',
   shortcutRemove: '从分屏移除当前格',
 }
 
@@ -145,6 +146,7 @@ const MV_EN = {
   shortcutFocusNext: 'Focus next pane',
   shortcutAttention: 'Jump to the pane that needs you',
   shortcutMaximize: 'Maximize or restore the current pane',
+  shortcutSwapNext: 'Swap places with the next pane',
   shortcutRemove: 'Remove the current pane from the split',
 }
 

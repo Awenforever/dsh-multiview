@@ -104,6 +104,7 @@ function installDom(store) {
 /** Fake client context: records registrations, stubs every service the bundle touches. */
 function createContext() {
   const registered = []
+  registered.shortcuts = []
   const injected = []
   const slots = {
     register: (declaration, component) => {
@@ -137,7 +138,12 @@ function createContext() {
       usePanelInfo: (selector) => selector({ activePanelId: 'multiview' }),
     },
     uiWorkspace: { openSession: () => {} },
-    shortcuts: { register: () => () => {} },
+    shortcuts: {
+      register: (entry) => {
+        registered.shortcuts.push(entry)
+        return () => {}
+      },
+    },
   }
   return { ctx, registered, injected }
 }
@@ -220,6 +226,31 @@ test('the client bundle boots, installs its slots and renders the stage', () => 
   assert.equal(main.key, 'multiview')
   assert.ok(context.injected.some((entry) => entry.name === 'sidebar.panellist'), 'sidebar entry was not declared')
   assert.ok(context.registered.some((entry) => entry.name === 'multiview.pane'), 'pane slot was not registered')
+
+  /* Every command the README documents must actually reach the host shortcut layer.
+     Synthetic key events cannot exercise that layer in a real app, so registration is
+     asserted here instead. */
+  const commandIds = context.registered.shortcuts.map((entry) => entry.id).sort()
+  assert.deepEqual(
+    commandIds,
+    [
+      'multiview.pane.attention',
+      'multiview.pane.focusNext',
+      'multiview.pane.focusPrev',
+      'multiview.pane.maximize',
+      'multiview.pane.remove',
+      'multiview.pane.swapNext',
+    ],
+    'the registered command set does not match what the README promises',
+  )
+  for (const entry of context.registered.shortcuts) {
+    assert.equal(typeof entry.resolve, 'function', entry.id + ' has no resolve, so it can never run')
+    assert.equal(typeof entry.label, 'function', entry.id + ' has no label')
+    assert.ok(Array.isArray(entry.regions) && entry.regions.length > 0, entry.id + ' declares no regions')
+  }
+  /* The panel gate is what keeps these commands inert on the normal conversation. */
+  const gated = context.registered.shortcuts[0].resolve()
+  assert.equal(gated.status, 'handled', 'commands must resolve to handled on the split panel')
 
   const tree = main.component({
     renderSlot: () => null,
