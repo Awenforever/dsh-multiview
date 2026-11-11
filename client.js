@@ -21,6 +21,7 @@ const MV_ZH = {
     pick: '选择会话',
     pickSearch: '搜索会话',
     pickEmpty: '没有匹配的会话',
+    pickMore: '还有 {count} 个会话，输入关键词可继续筛选',
     pickOnStage: '已在分屏中',
     pickNone: '还没有会话，先在左侧新建一个',
     loading: '正在打开会话…',
@@ -93,6 +94,7 @@ const MV_EN = {
     pick: 'Pick a session',
     pickSearch: 'Search sessions',
     pickEmpty: 'No matching session',
+    pickMore: '{count} more conversations — type to narrow',
     pickOnStage: 'On this split',
     pickNone: 'No conversations yet — create one in the sidebar first',
     loading: 'Opening session…',
@@ -1452,6 +1454,7 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-picker-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-picker-item:not([data-depth="0"]){color:var(--dsw-alias-label-secondary);font-size:12px}
 .mv-picker-item:not([data-depth="0"]):hover{color:var(--dsw-alias-label-primary)}
+.mv-picker-more{padding:6px 8px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
 .mv-picker-empty{padding:12px 8px;font-size:13px;color:var(--dsw-alias-label-secondary)}
 .mv-picker-group{padding:10px 8px 4px;font-size:11px;font-weight:600;letter-spacing:0.02em;color:var(--dsw-alias-label-secondary);text-transform:none}
 .mv-views{position:relative;display:inline-flex}
@@ -1853,7 +1856,17 @@ function mvPickableRows(query, views = [], currentViewId = null, onStage = []) {
                 });
             }
         }
-        return out.slice(0, 240);
+        const cap = 240;
+        if (out.length > cap) {
+            const kept = out.slice(0, cap);
+            kept.push({
+                kind: 'more',
+                id: '__more__',
+                remaining: out.length - cap
+            });
+            return kept;
+        }
+        return out;
     } catch (error) {
         return [];
     }
@@ -1885,7 +1898,13 @@ function MvPanePicker(props) {
             key: 'group-' + row.id,
             className: 'mv-picker-group',
             role: 'presentation'
-        }, row.title) : h('button', {
+        }, row.title) : row.kind === 'more' ? h('div', {
+            key: 'more',
+            className: 'mv-picker-more',
+            'data-remaining': String(row.remaining)
+        }, mvFormat(T('pickMore'), {
+            count: String(row.remaining)
+        })) : h('button', {
             key: row.id,
             type: 'button',
             className: 'mv-picker-item',

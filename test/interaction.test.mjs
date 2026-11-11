@@ -221,3 +221,50 @@ test('the tooltip names the shortcut while the accessible name stays the action'
   assert.ok(remove !== undefined, 'the clear control exists')
   assert.equal(remove.props.title, 'remove · Mod+Alt+W', 'the tooltip teaches the chord')
 })
+
+test('the picker says how many conversations it is hiding', () => {
+  const ids = Array.from({ length: 300 }, (_, index) => 's' + String(index + 1).padStart(3, '0'))
+  const list = makeSessions(ids)
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  hook.bind('p1', null)
+
+  let tree = harness.render(stage, {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  })
+
+  const picker = byClass(tree, 'mv-picker')[0]
+  assert.equal(byClass(picker, 'mv-picker-item').length, 240, 'the list stops at the cap')
+  const more = byClass(picker, 'mv-picker-more')[0]
+  assert.ok(more !== undefined, 'the cut-off is stated, not silent')
+  assert.equal(more.props['data-remaining'], '60', 'it says how many are hidden')
+
+  /* Typing still searches the whole set, including rows past the cap. */
+  const search = byClass(picker, 'mv-picker-search')[0]
+  search.props.onChange({ target: { value: 's300' } })
+  tree = harness.render(stage, {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  })
+  const narrowed = byClass(tree, 'mv-picker')[0]
+  assert.equal(byClass(narrowed, 'mv-picker-item').length, 1, 'a hidden conversation is still findable')
+  assert.equal(byClass(narrowed, 'mv-picker-more').length, 0, 'no notice when nothing is hidden')
+
+  /* A short list never shows the notice. */
+  const small = makeSessions(['s1', 's2'])
+  const smallHost = bootHost({ sessions: small })
+  const smallHarness = createHarness()
+  smallHost.hook.bind('p1', null)
+  const smallTree = smallHarness.render(smallHost.stage, {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(small),
+    useSessionStatus: (selector) => selector(new Map()),
+  })
+  assert.equal(byClass(smallTree, 'mv-picker-more').length, 0, 'a short list carries no notice')
+})

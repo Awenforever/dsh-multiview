@@ -168,7 +168,15 @@ function mvPickableRows(
         out.splice(before, 0, { kind: 'group', id: group.key, title: group.label })
       }
     }
-    return out.slice(0, 240)
+    /* A long sidebar must not become a silent cut-off: past the cap the list says how many are
+       hidden, and typing still narrows against the full set because the cap is applied last. */
+    const cap = 240
+    if (out.length > cap) {
+      const kept = out.slice(0, cap)
+      kept.push({ kind: 'more', id: '__more__', remaining: out.length - cap })
+      return kept
+    }
+    return out
   } catch (error) {
     return []
   }
@@ -210,6 +218,16 @@ function MvPanePicker(props) {
         : rows.map((row) =>
             row.kind === 'group'
               ? h('div', { key: 'group-' + row.id, className: 'mv-picker-group', role: 'presentation' }, row.title)
+              : row.kind === 'more'
+              ? h(
+                  'div',
+                  {
+                    key: 'more',
+                    className: 'mv-picker-more',
+                    'data-remaining': String(row.remaining),
+                  },
+                  mvFormat(T('pickMore'), { count: String(row.remaining) }),
+                )
               : h(
                   'button',
                   {
