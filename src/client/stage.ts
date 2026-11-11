@@ -1026,9 +1026,13 @@ function MultiviewStage(props) {
     renderMvNode(narrow ? visibleLeaf : maximizedLeaf === null ? state.layout : maximizedLeaf, surface),
   )
 
+  /* Collapsed to one pane, the switcher is the only view of the other conversations, so
+     it carries their status: a pane waiting for an answer or finished unread is marked
+     here, otherwise the narrow layout hides exactly the thing the split exists for. */
   const chips = narrow
     ? leaves.map((leaf) => {
         const title = leaf.sessionId === null ? T('empty') : mvTitle(leaf.sessionId) ?? T('empty')
+        const dot = leaf.sessionId === null ? 'idle' : mvDotState(statuses.get(leaf.sessionId))
         return h(
           'button',
           {
@@ -1036,9 +1040,12 @@ function MultiviewStage(props) {
             type: 'button',
             className: 'mv-chip',
             'data-active': leaf.id === focusedLeaf.id ? 'true' : 'false',
-            title,
+            'data-state': dot,
+            title: dot === 'idle' ? title : title + ' — ' + mvDotLabel(dot),
+            'aria-label': dot === 'idle' ? title : title + ' — ' + mvDotLabel(dot),
             onClick: () => mvFocus(leaf.id),
           },
+          dot === 'idle' ? null : h('span', { className: 'mv-dot', 'data-state': dot, 'aria-hidden': true }),
           title.length > 14 ? title.slice(0, 14) + '…' : title,
         )
       })

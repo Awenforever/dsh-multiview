@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.32';
+const MV_PLUGIN_VERSION = '0.1.33';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -2462,14 +2462,21 @@ function MultiviewStage(props) {
     }, renderMvNode(narrow ? visibleLeaf : maximizedLeaf === null ? state.layout : maximizedLeaf, surface));
     const chips = narrow ? leaves.map((leaf)=>{
         const title = leaf.sessionId === null ? T('empty') : mvTitle(leaf.sessionId) ?? T('empty');
+        const dot = leaf.sessionId === null ? 'idle' : mvDotState(statuses.get(leaf.sessionId));
         return h('button', {
             key: 'chip-' + leaf.id,
             type: 'button',
             className: 'mv-chip',
             'data-active': leaf.id === focusedLeaf.id ? 'true' : 'false',
-            title,
+            'data-state': dot,
+            title: dot === 'idle' ? title : title + ' — ' + mvDotLabel(dot),
+            'aria-label': dot === 'idle' ? title : title + ' — ' + mvDotLabel(dot),
             onClick: ()=>mvFocus(leaf.id)
-        }, title.length > 14 ? title.slice(0, 14) + '…' : title);
+        }, dot === 'idle' ? null : h('span', {
+            className: 'mv-dot',
+            'data-state': dot,
+            'aria-hidden': true
+        }), title.length > 14 ? title.slice(0, 14) + '…' : title);
     }) : [];
     return h('div', {
         ref: rootRef,
