@@ -211,6 +211,19 @@ if (zhKeys !== null && enKeys !== null) {
     }
   }
 
+  /* Corners come from the host's scale (xs 4 / sm 8 / md 12 / lg 16 / xl 20 / panel 28), so a
+     theme change reaches the plugin too. Hairline bars (2px) and pills (999px) are shapes, not
+     corners, and stay literal. */
+  if (css !== null) {
+    const radiusLiterals = [...css[1].matchAll(/border-radius:\s*(\d+)px/g)]
+      .map((match) => Number(match[1]))
+      .filter((value) => value > 2 && value < 999)
+    ok(
+      radiusLiterals.length === 0,
+      `stylesheets must not hard-code a corner radius (found ${radiusLiterals.join(', ')}px); use var(--dsw-radius-*)`,
+    )
+  }
+
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 
