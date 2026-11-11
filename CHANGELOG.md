@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.65 — 2026-11-11
+
+### 验证：35 个负向对照，覆盖每一类守卫
+
+`npm run prove:guards` 现在跑 **35 个用例**，每个都制造对应错误并要求构建以**指定信息**失败。实测 **35/35 BITES，0 误判、0 跳过**。
+
+覆盖：清单与元数据（包名/版本格式/许可证/engines 六个版本点/bundle patch/platform/immediately/ESM/files）、产物结构（loader id、inject 导出、注册方式、宿主 apply、patch 行名、样式内联）、网络面（额外端点、原始 XHR、注册表恰好一次、fetch 上限、同源市场 API）、拷贝与文档（缺失键、中英互串、两边同文、locale 标题、engines 漂移、清单版本）、尺寸预算。
+
+### 顺带修掉一个真缺陷
+
+`index.js must export a Host apply` 原先用 `includes('export function apply')`——**`export function applyHost` 也能通过**。已改为带词边界的正则，本轮变异立刻咬住。
+
+### 三个"变异打偏"的教训
+
+loader id 与 inject 导出由 `scripts/build.mjs` **生成**，改源码无效；样式令牌守卫要**删光**全部令牌才触发。打偏不是守卫的错，但不核查就会把"打偏"误报成"守卫有效"——本轮把它们挪到专门的第四组，改成让构建器故意生成错的东西。
+
+### 诚实标注
+
+67 处断言中的 35 处被逐一证明；其余 32 处是同一模式的循环重复（`files` 三个字段、`engines` 多个版本点、样式三条规则）。可以负责地说：**每一类检查都被看到失败过**，而不是"每条断言都单独证明过"。
+
+### 说明
+
+- 发行代码仅版本号变化。VM 仍停在 `Web authentication failed`（R32）。
+
+
 ## 0.1.64 — 2026-11-11
 
 ### 验证方法：守卫也要被证明
