@@ -135,7 +135,7 @@ ok(
   'client.js version constant must equal package.json version',
 )
 ok(clientBytes < 160 * 1024, `client.js is ${clientBytes} bytes, over the 160 KiB budget`)
-ok(host.includes('export function apply'), 'index.js must export a Host apply')
+ok(/^export function apply\s*\(/m.test(host), 'index.js must export a Host apply')
 ok(readFileSync(join(ROOT, 'cordis.patch.yml'), 'utf8').includes("name: 'dsh-multiview'"), 'patch row must name the package')
 
 // ---- copy ---------------------------------------------------------------------

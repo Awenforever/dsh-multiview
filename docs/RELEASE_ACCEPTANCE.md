@@ -90,32 +90,29 @@
 
 ## 1.9 守卫的自证（哪些检查被证明会失败）
 
-`npm run check` 里有 **67 处断言**。上一轮发现一个严酷的事实：**没被看到失败过的检查，不能算存在**——
-两条双语词典守卫上线时是静默通过的（切片取到空块、取到图标常量），我却在汇报里把它们算作"覆盖"。
+`npm run check` 里有 **67 处断言**。一条铁律：**没被看到失败过的检查，不能算存在**——
+两条双语词典守卫上线时就曾静默通过（切片取到空块、取到图标常量），却被算作"覆盖"。
 
-因此有了 `npm run prove:guards`：对 13 类守卫**各自制造对应的真实错误**，要求构建以**指定的信息**失败。
+`npm run prove:guards` 跑四组负向对照，共 **35 个用例**，每个都要求构建以**指定信息**失败。
 
-| 用例 | 制造的错 | 结果 |
-|---|---|---|
-| package name | 改名 | BITES |
-| license | 换成 Apache-2.0 | BITES |
-| module type | 改成 commonjs | BITES |
-| prerelease engines | 收成单段范围 | BITES |
-| publish list | 从 `files` 删掉 `client.js` | BITES |
-| console noise | 注入 `console.log` | BITES |
-| dynamic code | 注入 `eval()` | BITES |
-| menu semantics | 弹层改回 `role="menu"` | BITES |
-| hex colour | 样式里写 `#ff0000` | BITES |
-| attention drift | 在 stage 里重写注意力规则 | BITES |
-| missing copy key | 删掉一个在用的中文键 | BITES |
-| docs drift | 改掉文档里的 engines 范围 | BITES |
-| checklist version | 把清单里的版本号改成 0.0.0 | BITES |
+| 组 | 用例 |
+|---|---|
+| 清单与元数据 | 包名、版本格式、许可证、`engines.dsh` 缺失、预发布陷阱、0.2.2 终版、pre-0.2、0.3 预发布、逐条枚举、bundle patch、client platform、immediately、ESM、`files` 三项 |
+| 产物结构 | loader id、inject/apply 导出、`__ModuleLoader__` 注册方式、宿主 `apply`、patch 行名、样式内联 |
+| 网络面 | 额外端点、原始 XHR、注册表恰好一次、fetch 次数上限、同源市场 API |
+| 拷贝与文档 | 缺失文案键、中英互串、两边同文、重复未翻译、zh/en `meta.title`、文档 engines 漂移、清单版本号 |
+| 尺寸 | `client.js` 超 160 KiB |
 
-**诚实标注**：这 13 类对应约 32 处断言；**其余约 35 处断言尚未做过负向对照**，它们属于"静态断言"，
-只能说明当前值符合预期，不能说"错误一定会被抓住"。下一轮继续补，直到能给出"证明/未证明"的完整清单。
+**实际结论（2026-11-11 实测）**：35/35 BITES。
 
-另一个教训写在脚本里：**恢复源码后必须重新构建**，否则下一个用例读到的是被污染的 bundle——第一次跑时
-`docs drift` 与 `checklist version` 就是因此误判的。
+**诚实标注**：67 处断言中这 35 个用例覆盖了 **35 处**；其余 32 处是**同一模式的重复**（对 `files` 的三个字段、
+`engines` 的多个版本点、样式三条规则等循环生成），它们的兄弟用例已被证明会失败。因此可以这样说：
+**每一类检查都至少被看到失败过一次**，而不是"每一条断言都被单独证明"。
+
+**过程中的发现**（这轮最值钱的部分）：
+
+- `index.js must export a Host apply` 原先用 `includes('export function apply')`，**`applyHost` 也能通过**——已改为带词边界的正则，本轮变异随即咬住。
+- 三条"变异打偏"：loader id 与 inject 导出是 `scripts/build.mjs` **生成**的，改源码无效；样式令牌守卫要**删光**所有令牌才会触发。打偏不是守卫的错，但如果不查就会把"打偏"误报成"守卫有效"。
 
 ## 2.1 win11-test 真机（DSH 0.2.2-rc.1，真实 Electron 应用）
 

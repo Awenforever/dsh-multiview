@@ -53,7 +53,7 @@
     "prepack": "node --disable-warning=ExperimentalWarning scripts/build.mjs && node scripts/check.mjs",
     "fuzz": "node .dev/vm/fuzz-invariants.mjs 300 40",
     "fuzz:render": "node .dev/vm/fuzz-render.mjs 250 25",
-    "prove:guards": "python .dev/vm/sweep-guards.py"
+    "prove:guards": "python .dev/vm/prove-guards-all.py"
   },
   "publishConfig": {
     "access": "public",
