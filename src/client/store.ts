@@ -321,11 +321,30 @@ function mvOpenForSession(sessionId: string | null): void {
     const owner = owners[0]
     if (owner !== undefined) {
       if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) return current
-      return { ...current, layout: owner.layout, currentViewId: owner.id, maximized: null, preset: mvLeaves(owner.layout).length }
+      /* Switching to a smaller saved split invalidates the focused pane id (p4 lives in the
+         four-pane shape). An invalid focus leaves the whole split keyboard-dead, so repair it:
+         keep the user's pane when it still exists, otherwise focus the pane holding the Session
+         we were asked to open, otherwise the first pane. */
+      const ownerLeaves = mvLeaves(owner.layout)
+      const stillThere = ownerLeaves.some((leaf) => leaf.id === current.focused)
+      const holder = ownerLeaves.find((leaf) => leaf.sessionId === sessionId)
+      const focused = stillThere ? current.focused : holder !== undefined ? holder.id : ownerLeaves[0].id
+      return {
+        ...current,
+        layout: owner.layout,
+        focused,
+        currentViewId: owner.id,
+        maximized: null,
+        preset: ownerLeaves.length,
+      }
     }
     if (mvViewKey(current.layout).split(',').includes(sessionId)) {
-      /* Already on stage in the ad-hoc split: keep it, but remember it. */
-      return current.currentViewId === null ? { ...current, currentViewId: null } : current
+      /* Already on stage in the ad-hoc split. Opening a conversation must land on its pane —
+         doing nothing here made "open this Session" look broken. */
+      const holder = mvLeaves(current.layout).find((leaf) => leaf.sessionId === sessionId)
+      if (holder === undefined) return current
+      if (current.focused === holder.id && current.currentViewId === null) return current
+      return { ...current, focused: holder.id, maximized: null }
     }
     const layout = mvWithSession(mvPreset(2), 'p1', sessionId)
     return { ...current, layout, currentViewId: null, focused: 'p1', preset: 2, maximized: null }

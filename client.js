@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.43';
+const MV_PLUGIN_VERSION = '0.1.44';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -792,19 +792,28 @@ function mvOpenForSession(sessionId) {
         const owner = owners[0];
         if (owner !== undefined) {
             if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) return current;
+            const ownerLeaves = mvLeaves(owner.layout);
+            const stillThere = ownerLeaves.some((leaf)=>leaf.id === current.focused);
+            const holder = ownerLeaves.find((leaf)=>leaf.sessionId === sessionId);
+            const focused = stillThere ? current.focused : holder !== undefined ? holder.id : ownerLeaves[0].id;
             return {
                 ...current,
                 layout: owner.layout,
+                focused,
                 currentViewId: owner.id,
                 maximized: null,
-                preset: mvLeaves(owner.layout).length
+                preset: ownerLeaves.length
             };
         }
         if (mvViewKey(current.layout).split(',').includes(sessionId)) {
-            return current.currentViewId === null ? {
+            const holder = mvLeaves(current.layout).find((leaf)=>leaf.sessionId === sessionId);
+            if (holder === undefined) return current;
+            if (current.focused === holder.id && current.currentViewId === null) return current;
+            return {
                 ...current,
-                currentViewId: null
-            } : current;
+                focused: holder.id,
+                maximized: null
+            };
         }
         const layout = mvWithSession(mvPreset(2), 'p1', sessionId);
         return {

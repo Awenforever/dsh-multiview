@@ -863,3 +863,70 @@ test('applying a saved split prunes Sessions the host no longer has', () => {
   loading.applyView('stale')
   assert.deepEqual(leavesOf(loading).map((leaf) => leaf.sessionId), ['s1', 'session-deleted'], 'nothing is pruned before the list is ready')
 })
+
+test('opening a conversation lands on a valid pane, whatever shape it switches to', () => {
+  const two = (first, second) => ({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: first },
+    b: { kind: 'leaf', id: 'p2', sessionId: second },
+  })
+  const four = {
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'split', id: 's2', dir: 'col', ratio: 0.5,
+      a: { kind: 'split', id: 's3', dir: 'col', ratio: 0.5,
+        a: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+        b: { kind: 'leaf', id: 'p3', sessionId: 's3' } },
+      b: { kind: 'leaf', id: 'p4', sessionId: 's4' } },
+  }
+
+  /* Focused on p4 (a four-pane id) while the saved split has only two panes. */
+  const hook = bootWithHook({
+    version: 3,
+    layout: four,
+    focused: 'p4',
+    preset: 4,
+    seeded: true,
+    currentViewId: null,
+    views: [{ id: 'small', name: 'Two', layout: two('s1', 's2'), savedAt: 1 }],
+  }, undefined, {
+    sessionsList: () => ({
+      phase: 'ready',
+      ids: ['s1', 's2', 's3', 's4'],
+      byId: {
+        s1: { id: 's1', title: 'A', blank: false },
+        s2: { id: 's2', title: 'B', blank: false },
+        s3: { id: 's3', title: 'C', blank: false },
+        s4: { id: 's4', title: 'D', blank: false },
+      },
+    }),
+  }).hook
+
+  hook.openFor('s1')
+  const switched = hook.state()
+  const ids = leavesOf(hook).map((leaf) => leaf.id)
+  assert.ok(
+    ids.includes(switched.focused),
+    'switching to a smaller saved split must not leave focus on a pane that no longer exists',
+  )
+  assert.equal(switched.focused, 'p1', 'the pane holding the requested Session wins when the old focus is invalid')
+  assert.equal(switched.currentViewId, 'small', 'the saved split becomes current')
+
+  /* Opening a Session that already sits in the ad-hoc split moves focus to its pane. */
+  const adHoc = bootWithHook({
+    version: 3,
+    layout: two('s1', 's2'),
+    focused: 'p2',
+    preset: 2,
+    seeded: true,
+    currentViewId: null,
+    views: [],
+  }).hook
+  adHoc.openFor('s1')
+  assert.equal(adHoc.state().focused, 'p1', 'opening a Session on stage moves focus to its pane')
+
+  /* A Session in no split at all replaces the stage with a two-pane split holding it. */
+  adHoc.openFor('s3')
+  assert.equal(leavesOf(adHoc)[0].sessionId, 's3', 'an unknown Session starts a fresh split holding it')
+  assert.equal(leavesOf(adHoc).length, 2, 'the fresh split keeps the product minimum of two panes')
+})
