@@ -95,6 +95,44 @@ export function mvArrangementKey(node: any): string {
   return mvSessionSet(node) + '@' + String(mvLeaves(node).length)
 }
 
+/**
+ * Panes that want the user right now, in reading order.
+ *
+ * Only `waiting` (blocked on an approval or a question) and `unread` (finished while you
+ * were elsewhere) qualify. A pane that is merely `running` does not: producing output is
+ * not asking for anything, and counting it would make the jump cycle walk through
+ * conversations that need nothing. That exclusion is a product decision, made explicit
+ * here so a future change has to argue with it.
+ * @param node - a split tree.
+ * @param statusOf - maps a Session id to `idle`, `running`, `waiting` or `unread`.
+ * @returns pane ids, in the order they appear on screen.
+ */
+export function mvAttentionPanes(node: any, statusOf: (sessionId: string) => string): string[] {
+  const out: string[] = []
+  for (const leaf of mvLeaves(node)) {
+    if (leaf.sessionId === null || leaf.sessionId === undefined || leaf.sessionId === '') continue
+    const state = statusOf(leaf.sessionId)
+    if (state === 'waiting' || state === 'unread') out.push(leaf.id)
+  }
+  return out
+}
+
+/**
+ * The next pane wanting attention after the focused one, wrapping around.
+ * @param node - a split tree.
+ * @param focusedId - the pane the user is on.
+ * @param statusOf - maps a Session id to `idle`, `running`, `waiting` or `unread`.
+ * @returns the pane to focus, or null when nothing is waiting.
+ */
+export function mvNextAttentionPane(node: any, focusedId: string, statusOf: (sessionId: string) => string): string | null {
+  const candidates = mvAttentionPanes(node, statusOf)
+  if (candidates.length === 0) return null
+  const order = mvLeaves(node).map((leaf) => leaf.id)
+  const from = order.indexOf(focusedId)
+  const after = candidates.filter((id) => order.indexOf(id) > from)
+  return after.length > 0 ? after[0] : candidates[0]
+}
+
 /** Pane count of one tree. */
 export function mvLeafCount(node: any): number {
   return mvLeaves(node).length

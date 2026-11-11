@@ -43,7 +43,9 @@ which is why the four-pane cap survives a market where every competitor offers m
 
 1. **Attention, not pixels.** The job is noticing which conversation wants you. A pane that
    is blocked on an approval or finished unread is reachable in one click or one chord
-   (`Mod+Alt+J`), and says so in its header.
+   (`Mod+Alt+J`), and says so in its header. "Wants you" excludes a pane that is merely
+   running: producing output is not asking for anything, and treating it as attention would
+   make the chord walk through conversations that need nothing (decided 2026-11-11).
 2. **Getting a session in without leaving.** A sidebar row action and a matching menu row
    both put a session into the split; an empty pane is filled, a new pane is added under the
    cap, and only a full split replaces the focused pane.

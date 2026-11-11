@@ -74,7 +74,17 @@ Measured with a CDP rAF sampler on `desktop-kfscv8c-1` (1530×851 window):
 
 Four long streams is the heaviest case measured: still near 60fps on average, but p95 rises to 50ms with an occasional 150ms frame (four virtualized transcripts re-laying out per chunk). v1 deliberately does not throttle — "every pane stays a real Chat" wins over a frame number.
 
-Transcripts are virtualized per turn by DSH itself, so a pane costs roughly one active turn plus one editor instance. Below 900px wide or 520px tall the stage degrades to a single pane plus a pane switcher; the layout tree is preserved.
+Long frames are not this plugin's work. A 3-minute run with two panes streaming into the VM build recorded 205 long tasks, so the CPU profiler was sampled during a live two-pane stream to attribute them (0.5ms sampling, 3609 samples):
+
+| Owner | Share of sampled time |
+|---|---|
+| `dsh-multiview` | **0.0%** |
+| Host / DSH UI packages | 7.1% |
+| Idle, `(program)`, GC, native | 92.9% |
+
+Over the same 3 minutes: 0 uncaught errors, JS heap 53MB → peak 85MB → 42MB (reclaimed, no unbounded growth), and both panes kept streaming to completion.
+
+Transcripts are virtualized per turn by DSH itself, so a pane costs roughly one active turn plus one editor instance. Below 900px wide or 520px tall the stage degrades to a single pane plus a pane switcher (which shows each pane's status); the layout tree is preserved.
 
 ## Development
 

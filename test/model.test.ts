@@ -16,6 +16,8 @@ import {
   mvResize,
   mvSanitize,
   mvArrangementKey,
+  mvAttentionPanes,
+  mvNextAttentionPane,
   mvSessionSet,
   mvShapeTo,
   mvSwapSessions,
@@ -190,4 +192,28 @@ test('an arrangement key separates a swap from a shape change', () => {
   const three = mvShapeTo(two, 3)
   assert.equal(mvArrangementKey(three), 'a,b@3')
   assert.notEqual(mvArrangementKey(three), mvArrangementKey(two))
+})
+
+test('attention excludes running, which is the agreed product rule', () => {
+  const tree = mvWithSession(mvWithSession(mvPreset(3), 'p1', 'a'), 'p2', 'b')
+  tree.kind === 'split' ? null : null
+  const withThird = mvWithSession(tree, 'p3', 'c')
+  const states = { a: 'running', b: 'waiting', c: 'idle' }
+  const statusOf = (id) => states[id] ?? 'idle'
+
+  /* Only the pane blocked on a question counts; the one producing output does not. */
+  assert.deepEqual(mvAttentionPanes(withThird, statusOf), ['p2'])
+
+  /* A split where everything is merely running asks for nothing at all. */
+  const allRunning = (id) => (id === '' ? 'idle' : 'running')
+  assert.deepEqual(mvAttentionPanes(withThird, allRunning), [])
+  assert.equal(mvNextAttentionPane(withThird, 'p1', allRunning), null)
+
+  /* Unread counts, and the cycle wraps back to the first candidate. */
+  const unreadStates = { a: 'unread', b: 'waiting', c: 'idle' }
+  const statusOf2 = (id) => unreadStates[id] ?? 'idle'
+  assert.deepEqual(mvAttentionPanes(withThird, statusOf2), ['p1', 'p2'])
+  assert.equal(mvNextAttentionPane(withThird, 'p1', statusOf2), 'p2')
+  assert.equal(mvNextAttentionPane(withThird, 'p3', statusOf2), 'p1')
+  assert.equal(mvNextAttentionPane(withThird, 'p2', statusOf2), 'p1')
 })

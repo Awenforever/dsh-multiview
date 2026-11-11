@@ -413,21 +413,16 @@ function mvStatusSnapshot(): any {
 }
 
 /**
- * Panes that want the user right now: one is blocked on an approval or a question,
- * or finished with something unread. Position order keeps the cycle predictable.
+ * Panes that want the user right now, in reading order. The rule itself lives in
+ * `model.ts` so it can be tested without a renderer; this only supplies the status map.
  * @param state - current multiview state.
  * @param statuses - per-Session status map.
  * @returns pane ids in a stable order.
  */
 function mvAttentionLeaves(state: any, statuses: any): string[] {
-  const out: string[] = []
-  for (const leaf of mvLeaves(state.layout)) {
-    if (leaf.sessionId === null) continue
-    const status = statuses === undefined || statuses === null ? undefined : statuses.get(leaf.sessionId)
-    const dot = mvDotState(status)
-    if (dot === 'waiting' || dot === 'unread') out.push(leaf.id)
-  }
-  return out
+  return mvAttentionPanes(state.layout, (sessionId) =>
+    mvDotState(statuses === undefined || statuses === null ? undefined : statuses.get(sessionId)),
+  )
 }
 
 /**
@@ -437,12 +432,9 @@ function mvAttentionLeaves(state: any, statuses: any): string[] {
  * @returns the pane to focus, or null when nothing is waiting.
  */
 function mvNextAttention(state: any, statuses: any): string | null {
-  const candidates = mvAttentionLeaves(state, statuses)
-  if (candidates.length === 0) return null
-  const order = mvLeaves(state.layout).map((leaf) => leaf.id)
-  const from = order.indexOf(state.focused)
-  const after = candidates.filter((id) => order.indexOf(id) > from)
-  return after.length > 0 ? after[0] : candidates[0]
+  return mvNextAttentionPane(state.layout, state.focused, (sessionId) =>
+    mvDotState(statuses === undefined || statuses === null ? undefined : statuses.get(sessionId)),
+  )
 }
 
 /**

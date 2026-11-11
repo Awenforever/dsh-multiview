@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.33';
+const MV_PLUGIN_VERSION = '0.1.34';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -314,6 +314,23 @@ function mvSessionSet(node) {
 }
 function mvArrangementKey(node) {
     return mvSessionSet(node) + '@' + String(mvLeaves(node).length);
+}
+function mvAttentionPanes(node, statusOf) {
+    const out = [];
+    for (const leaf of mvLeaves(node)){
+        if (leaf.sessionId === null || leaf.sessionId === undefined || leaf.sessionId === '') continue;
+        const state = statusOf(leaf.sessionId);
+        if (state === 'waiting' || state === 'unread') out.push(leaf.id);
+    }
+    return out;
+}
+function mvNextAttentionPane(node, focusedId, statusOf) {
+    const candidates = mvAttentionPanes(node, statusOf);
+    if (candidates.length === 0) return null;
+    const order = mvLeaves(node).map((leaf)=>leaf.id);
+    const from = order.indexOf(focusedId);
+    const after = candidates.filter((id)=>order.indexOf(id) > from);
+    return after.length > 0 ? after[0] : candidates[0];
 }
 function mvLeafCount(node) {
     return mvLeaves(node).length;
@@ -1938,22 +1955,10 @@ function mvStatusSnapshot() {
     return mvStatusMirror;
 }
 function mvAttentionLeaves(state, statuses) {
-    const out = [];
-    for (const leaf of mvLeaves(state.layout)){
-        if (leaf.sessionId === null) continue;
-        const status = statuses === undefined || statuses === null ? undefined : statuses.get(leaf.sessionId);
-        const dot = mvDotState(status);
-        if (dot === 'waiting' || dot === 'unread') out.push(leaf.id);
-    }
-    return out;
+    return mvAttentionPanes(state.layout, (sessionId)=>mvDotState(statuses === undefined || statuses === null ? undefined : statuses.get(sessionId)));
 }
 function mvNextAttention(state, statuses) {
-    const candidates = mvAttentionLeaves(state, statuses);
-    if (candidates.length === 0) return null;
-    const order = mvLeaves(state.layout).map((leaf)=>leaf.id);
-    const from = order.indexOf(state.focused);
-    const after = candidates.filter((id)=>order.indexOf(id) > from);
-    return after.length > 0 ? after[0] : candidates[0];
+    return mvNextAttentionPane(state.layout, state.focused, (sessionId)=>mvDotState(statuses === undefined || statuses === null ? undefined : statuses.get(sessionId)));
 }
 const MvPaneHost = React.memo(function MvPaneHost(props) {
     return h(PaneHost, {
