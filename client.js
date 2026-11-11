@@ -332,7 +332,8 @@ function mvArrangementKey(node) {
 }
 function mvSessionState(status) {
     if (status === undefined || status === null) return 'idle';
-    if (status.pendingInteraction !== undefined) return 'waiting';
+    const pending = status.pendingInteraction;
+    if (pending !== undefined && pending !== null) return 'waiting';
     if (status.running === true) return 'running';
     if (status.completionUnread === true) return 'unread';
     return 'idle';

@@ -383,3 +383,18 @@ test('content hits fill in behind title matches without duplicating them', () =>
   const many = mvMergeSearchRows([], Array.from({ length: 5 }, (_, index) => ({ sessionId: 'h' + index, snippet: 'x' })), (id) => id, 3)
   assert.equal(many.length, 3, 'the merged list respects the cap')
 })
+
+test('the host status shape is classified as documented', () => {
+  /* Shapes taken from the host's `publishStatus`:
+     running: boolean | undefined, pendingInteraction: object | undefined, completionUnread: boolean. */
+  assert.equal(mvSessionState({ running: true, pendingInteraction: undefined, completionUnread: false }), 'running')
+  assert.equal(mvSessionState({ running: undefined, pendingInteraction: { id: 'x' }, completionUnread: false }), 'waiting')
+  assert.equal(mvSessionState({ running: true, pendingInteraction: { id: 'x' }, completionUnread: false }), 'waiting', 'asking outranks running')
+  assert.equal(mvSessionState({ running: false, pendingInteraction: undefined, completionUnread: true }), 'unread')
+  assert.equal(mvSessionState({ running: undefined, pendingInteraction: undefined, completionUnread: false }), 'idle')
+  assert.equal(mvSessionState({}), 'idle', 'an empty entry is idle')
+  /* A null pending interaction is not a pending interaction. */
+  assert.equal(mvSessionState({ running: true, pendingInteraction: null, completionUnread: false }), 'running')
+  assert.equal(mvSessionState(undefined), 'idle')
+  assert.equal(mvSessionState(null), 'idle')
+})

@@ -86,3 +86,29 @@ type Split = { kind:'split'; id: string; dir:'row'|'col'; ratio: number; a: Node
 
 1. 任一全局面板激活时右栏会话面会被卸下（`ui-sidebar-right` 的 on-screen session effect），所以格内无法直达文件预览/diff —— 用 ↗ 回原生视图，而不是 monkey-patch。
 2. Hero 的工作区选择器属于应用级导航（`uiWorkspace.openSession` → `selectPanel(null)`），所以格内不做新建会话。
+
+## Session status contract (verified against host source)
+
+The attention rule reads `useSessionStatus`, whose entries the host builds in
+`@deepseek-ai/dsh-client-ui-session` (`publishStatus`):
+
+```js
+next.set(id, {
+  running: this.running.get(id),              // boolean | undefined
+  pendingInteraction: this.pendingSnapshot.get(id), // interaction object | undefined
+  completionUnread: this.completionUnread.has(id)   // boolean
+})
+```
+
+Consequences this plugin relies on:
+
+- **`pendingInteraction` is an object, not a flag.** Testing it for truthiness is right; testing
+  "is not undefined" additionally treats `null` as a pending interaction, so both nullish kinds are
+  excluded.
+- **A waiting session is also running**, which is why `waiting` is classified before `running`.
+- **The host already excludes the main view** from `completionUnread` (`!this.isMain(sessionId)`), so
+  a conversation being watched natively is not reported as unread here — panes are retained
+  references, not the main view.
+
+The fake host in `test/harness.mjs` uses these same shapes; the audit above is what keeps the
+fixtures from being a restatement of my own guesses.

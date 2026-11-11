@@ -108,7 +108,13 @@ export function mvArrangementKey(node: any): string {
  */
 export function mvSessionState(status: any): string {
   if (status === undefined || status === null) return 'idle'
-  if (status.pendingInteraction !== undefined) return 'waiting'
+  /* Verified against the host's own derivation
+     (`@deepseek-ai/dsh-client-ui-session`, `publishStatus`), which builds each entry as
+     `{ running: boolean | undefined, pendingInteraction: interaction | undefined,
+        completionUnread: boolean }`.
+     A null pending interaction is not a pending interaction: test for both nullish kinds. */
+  const pending = status.pendingInteraction
+  if (pending !== undefined && pending !== null) return 'waiting'
   if (status.running === true) return 'running'
   if (status.completionUnread === true) return 'unread'
   return 'idle'
