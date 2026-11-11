@@ -177,20 +177,24 @@ const MV_ICON = {
 }
 
 /**
- * Host version note for the toolbar tooltip.
+ * Toolbar tooltip: which build is running, plus a note when the host is untested.
  *
- * `engines.dsh` no longer fails closed on a newer minor, so an untested host can
- * still run the plugin. This says so instead of pretending the build is verified.
- * @returns the tooltip text, or the plain title when the host is a tested line.
+ * The plugin version belongs here because a profile can hold a newer package while the app still
+ * shows the bundle it loaded at boot — that looks exactly like a broken plugin, and nothing on screen
+ * used to say which build was actually running.
+ *
+ * `engines.dsh` no longer fails closed on a newer minor, so an untested host can still run the
+ * plugin. This says so instead of pretending the build is verified.
+ * @returns the tooltip text.
  */
 function mvHostTitle(): string {
-  const fallback = T('title')
+  const base = T('title') + ' · ' + MV_PLUGIN_VERSION
   try {
     const version = (window as any).__DSH_BOOT__?.release?.version
-    if (typeof version !== 'string' || version === '') return fallback
-    if (/^0\.2\.[12](?![0-9])/.test(version)) return fallback
-    return fallback + ' · ' + mvFormat(T('hostUnverified'), { version })
+    if (typeof version !== 'string' || version === '') return base
+    if (/^0\.2\.[12](?![0-9])/.test(version)) return base
+    return base + ' · ' + mvFormat(T('hostUnverified'), { version })
   } catch (error) {
-    return fallback
+    return base
   }
 }

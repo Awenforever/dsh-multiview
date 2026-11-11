@@ -198,3 +198,24 @@ test('an archived conversation cannot leave its pane maximized and empty', () =>
   assert.equal(pane.sessionId, null, 'the archived conversation left its pane')
   assert.equal(state.maximized, null, 'so the maximized claim is dropped too')
 })
+
+test('the toolbar tooltip names the running build', () => {
+  /* A profile can hold a newer package while the app still renders the bundle it loaded at boot.
+     Without the version in the tooltip that looks like a broken plugin, so the tooltip carries it. */
+  const list = makeSessions(['s1', 's2'])
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  const tree = harness.render(stage, {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  })
+  const title = byClass(tree, 'mv-bar-title')[0]
+  assert.ok(title !== undefined, 'the bar has a title element')
+  const tooltip = String(title.props.title ?? '')
+  assert.match(tooltip, /\d+\.\d+\.\d+/, 'the tooltip names a version')
+  assert.ok(tooltip.includes(hook.version), 'and it is the version of the running bundle')
+})

@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.98';
+const MV_PLUGIN_VERSION = '0.1.99';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -1796,16 +1796,16 @@ const MV_ICON = {
     split: 'M2.6 3.4h10.8v9.2H2.6zM8 3.4v9.2'
 };
 function mvHostTitle() {
-    const fallback = T('title');
+    const base = T('title') + ' · ' + MV_PLUGIN_VERSION;
     try {
         const version = window.__DSH_BOOT__?.release?.version;
-        if (typeof version !== 'string' || version === '') return fallback;
-        if (/^0\.2\.[12](?![0-9])/.test(version)) return fallback;
-        return fallback + ' · ' + mvFormat(T('hostUnverified'), {
+        if (typeof version !== 'string' || version === '') return base;
+        if (/^0\.2\.[12](?![0-9])/.test(version)) return base;
+        return base + ' · ' + mvFormat(T('hostUnverified'), {
             version
         });
     } catch (error) {
-        return fallback;
+        return base;
     }
 }
 

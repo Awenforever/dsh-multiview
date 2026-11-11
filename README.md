@@ -79,6 +79,16 @@ Who this is for, and the honest state of demand evidence: [docs/POSITIONING.md](
 5. Auto-sleep — resources are released when a pane is removed or rebound; there is no pretend "pause rendering of unfocused panes".
 6. More than four panes.
 
+## When the Split icon is missing
+
+Work through these in order; the first answers most reports:
+
+1. **Quit completely and reopen.** The plugin is a client bundle, read once at boot. Installing while the process keeps running leaves the old build on screen.
+2. **Confirm it is enabled**: Settings → Plugins, `dsh-multiview` should be on.
+3. **Compare versions**: hover the Split panel's title. The tooltip names the build that is actually running. If it is older than the package you installed, the restart did not take.
+4. **Check the host version** against `engines.dsh` (above). A newer host still loads the plugin, and the same tooltip says the host is unverified.
+5. The panel list holds three entries (Plugins / Schedules / Split); Split sits last.
+
 ## Performance
 
 Measured with a CDP rAF sampler on `desktop-kfscv8c-1` (1530×851 window):
