@@ -57,7 +57,7 @@ The divider itself is a focusable separator: `←`/`→` (or `↑`/`↓` on a st
 1. **File preview / diff inside a pane** — whenever any global panel is active, DSH unmounts the right sidebar's session surface (`no session surface is mounted`; shipped panels behave the same). Use ↗ to work in the native view.
 2. **Creating a session inside a pane** — the hero's workspace picker is application-level navigation. Create sessions natively.
 3. **Trajectory / plugin view switching per pane** — panes are pinned to Chat; no invented tabs.
-4. **Sidebar click routed into the focused pane** — that needs interception of a private navigation path; sidebar clicks keep their native behaviour (they leave the split).
+4. **Sidebar click routed into the focused pane** — intercepting the row click means hijacking a private navigation path, so a plain click keeps its native behaviour (it leaves the split). The supported way to send a session to the split is the row's hover button or its `…` menu, which you choose to press.
 5. Auto-sleep — resources are released when a pane is removed or rebound; there is no pretend "pause rendering of unfocused panes".
 6. More than four panes.
 
