@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.37 — 2026-11-11
+
+### 修复（文档诚信）
+
+- **docs/DESIGN.md 里有三处不实或过时的断言**，本轮逐条核对后改写：
+  1. §7 把 iframe 实现写成 dsh-split-view，把"固定 1–3×3 网格"归给 dsh-split-workspace。按我们自己的评估数据（`.dev/market/eval/capability/matrix.json`，追到源码行）：iframe 路线属于 `ai-eks`，`mhlywxl` 是不限量自动网格。**批评对手时用错材料，比不批评更糟**，已改为只写核实过的强弱项（并明确列出我们弱在哪：格数、格内预览、格内新建、自由拖拽重排）。
+  2. 另称某竞品"空位左移是已知缺陷"——评估未核实该说法，已删除，只保留我们自己的设计理由。
+  3. 引擎段落仍写着"靠上界 fail-closed 拒绝 `0.2.2-rc.x`"，而那只 0.1.16 的真实回归，早已改为逐条列出并用语义断言守住。
+- **新增三道文档漂移守卫**（`scripts/check.mjs`）：`engines.dsh` 必须与 `DESIGN.md`/`RELEASE_ACCEPTANCE.md` 中的串完全一致；`package.json.description` 必须同时出现在市场条目与英文 README 里。守卫上线即抓到 `RELEASE_ACCEPTANCE.md` 里过时的引擎范围。
+- 三个守卫都做了**变异验证**：分别破坏引擎串、README 首段、市场条目描述，检查均以 exit 1 失败；恢复后 exit 0。
+
+### 说明
+
+- 未在 VM 验证：VM 仍停在 `Web authentication failed`（环境阻塞，见 R32）。本轮改动均为文档与 `scripts/check.mjs`，构建产物与 0.1.36 相同（108635 字节）。
+
+
 ## 0.1.36 — 2026-11-11
 
 ### 变更

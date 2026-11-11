@@ -5,7 +5,7 @@
  * Runs with no dependencies and exits non-zero on the first failing check so CI
  * (or a human) can rely on it before packing.
  */
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -177,6 +177,41 @@ if (zhKeys !== null && enKeys !== null) {
   )
 } else {
   ok(false, `dictionary extraction failed (zh=${zhKeys === null ? 'missing' : 'ok'}, en=${enKeys === null ? 'missing' : 'ok'})`)
+}
+
+// ---- documentation drift -------------------------------------------------------
+// Two classes of mistake have shipped before: a doc quoting an engine range that the
+// manifest no longer declares, and a one-liner that exists in three places (manifest,
+// marketplace entry, README) drifting apart. Both are cheap to catch here.
+{
+  const engineRange = pkg.engines?.dsh
+  ok(typeof engineRange === 'string' && engineRange.length > 0, 'package.json must declare engines.dsh')
+  if (typeof engineRange === 'string') {
+    for (const file of ['docs/DESIGN.md', 'docs/RELEASE_ACCEPTANCE.md']) {
+      const text = readFileSync(join(ROOT, file), 'utf8')
+      ok(
+        text.includes(engineRange),
+        `${file} must quote the exact engines.dsh range (${engineRange}); update it when the manifest changes`,
+      )
+    }
+  }
+
+  const description = pkg.description
+  ok(typeof description === 'string' && description.length > 30, 'package.json needs a real description')
+  const entryPath = join(ROOT, '.dev/market/Awenforever__dsh-multiview.yml')
+  if (existsSync(entryPath)) {
+    const entry = readFileSync(entryPath, 'utf8')
+    ok(
+      entry.includes(description),
+      'the marketplace entry description drifted from package.json.description',
+    )
+  }
+  for (const file of ['README.md', 'README.zh.md']) {
+    const text = readFileSync(join(ROOT, file), 'utf8')
+    if (file === 'README.md') {
+      ok(text.includes(description), 'README.md does not carry the package.json.description sentence')
+    }
+  }
 }
 
 // ---- report -------------------------------------------------------------------

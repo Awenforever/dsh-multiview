@@ -1,7 +1,7 @@
 # 设计备忘 — dsh-multiview
 
 > 面向维护者。产品行为与限制见 `README.zh.md`；验收证据见 `RELEASE_ACCEPTANCE.md`。
-> 所有结论都来自 DSH Desktop `0.2.1-rc.5` 的实装源码（`app.asar` 内 `lib/client.js` 与 `lib/types/**`）与本机隔离实例实测，不来自文档推测。
+> 结论来自三处，优先级从高到低：**宿主自带的 Inspect Provider**（`cordis_inspect_query`，直接读实时的 Service/Event/Slot/Theme 契约）、`app.asar` 内实装源码（`lib/client.js` 与 `lib/types/**`）、隔离实例实测。已核对 `0.2.1-rc.5` 与 `0.2.2-rc.1` 两版；凡只有源码出处、没有运行时验证的结论，正文会单独标注。
 
 ## 1. 一句话架构
 
@@ -36,17 +36,18 @@ type Split = { kind:'split'; id: string; dir:'row'|'col'; ratio: number; a: Node
 
 - 预置三种形状：2 = 左右等分；3 = 左大列 + 右侧上下两格；4 = 2×2。
 - `ratio` 夹在 `[0.22, 0.78]`，避免拖出无法使用的窄条。
-- 无会话的格保留 `sessionId: null`，**不左移**；这一点是仓库 `dsh-plugin-workspace-split` 1.2.4 的已知缺陷，本实现刻意避开。
-- 持久化 `localStorage['dsh.multiview.v1']`，只存 `{version, layout, focused, preset, seeded}`；拖动时不写，抬指 200ms 后写一次。
-- 恢复时 `mvSanitize` 修复结构（未知形状丢弃、比例夹取、重复 pane id 重编、超过 4 格截断），再对 `sessions.list` 对账（消失/归档的会话置空但保位）。
+- 无会话的格保留 `sessionId: null`，**不左移**：位置稳定，用户放回会话时不需要重新找格。（早期版本在这里写"这是某竞品的已知缺陷"，但 2026-11-10 的评估没有核实该说法，属于不该有的断言，已删除——我们只描述自己的选择。）
+- 持久化 `localStorage['dsh.multiview.v1']`，存 `{version: 3, layout, focused, preset, seeded, views, currentViewId}`；拖动时不写，抬指 200ms 后写一次。
+- 恢复时 `mvSanitize` 修复结构（未知形状丢弃、比例夹取、重复 pane id 重编、超过 4 格截断），再对 `sessions.list` 对账（消失/归档的会话置空但保位）；`views` 经 `mvDedupeViews` 归一（同一编排只留一条，见 §5）。
 
 ## 4. 交互模型
 
 - **焦点**：任意时刻一个聚焦格；指针按下、`focusin`、快捷键都会更新。快捷键跳格时尝试 `ctx.conversation.input.for(scope).focus()` 把键盘交回该格 composer（不可用则只做视觉聚焦）。
-- **分割线**：`pointerdown` 进入拖拽态，之后用 **window 级** `pointermove` 监听（不依赖 pointer capture —— 合成输入下 capture 不可靠，实测会静默失败）。
-- **交换**：拖格头标题超过 4px 才进入拖拽；拖动中用 `elementFromPoint().closest('[data-pane]')` 找目标，落点高亮，抬起时交换两个 `sessionId`。
+- **分割线**：`pointerdown` 进入拖拽态，之后用 **window 级** `pointermove` 监听（不依赖 pointer capture —— 合成输入下 capture 不可靠，实测会静默失败）。分割线本身可聚焦：`←/→`（或 `↑/↓`）2%，`Shift` 5%，`Home`/`Enter`/`Space` 复位，`aria-valuenow` 同步。
+- **交换**：拖格头标题超过 4px 才进入拖拽；拖动中用 `elementFromPoint().closest('[data-pane]')` 找目标，落点高亮，抬起时交换两个 `sessionId`。键盘等价操作 `Mod+Alt+S` 与阅读顺序中的下一格交换，走同一个 `mvSwapLeaves`。
 - **最大化**：状态里保留 `maximized`，渲染时只显示该叶子；顶栏出现「还原」。
-- **窄窗**：`ResizeObserver` 测舞台尺寸，宽 < 900 或高 < 520 时只渲染聚焦格 + 顶栏格切换器（布局树保持不变）。
+- **注意力**：`waiting`（等待回答/审批）与 `unread`（完成未读）算「需要你」，**`running` 不算**（产品口径，2026-11-11 定案）。规则在 `model.ts` 的 `mvAttentionPanes`/`mvNextAttentionPane`，有单测与变异验证；格头状态点是按钮，`Mod+Alt+J` 跳到下一个。
+- **窄窗**：`ResizeObserver` 测舞台尺寸，宽 < 900 或高 < 520 时只渲染聚焦格 + 顶栏格切换器（布局树保持不变）；切换器按格显示状态点（运行中/等待/未读），因为此时它是其余格唯一的可视入口。
 
 ## 5. 视觉规范
 
@@ -67,11 +68,17 @@ type Split = { kind:'split'; id: string; dir:'row'|'col'; ratio: number; a: Node
 | 快捷键默认键 | 注册失败（reserved/conflict）→ 以**无默认绑定**重注册，命令仍可自绑；Web 端一开始就不给默认 |
 | `uiWorkspace.openSession` | 存在性探测；没有就隐藏 ↗ 按钮 |
 
-引擎上界 `<0.3.0` 是有意的 fail-closed：`0.2.2-rc.x` 这类新预发布线会被 semver 拒绝安装，需要显式升版本重新放行。
+引擎范围是**逐条列出**而不是靠上界兜底：`>=0.2.1-rc.5 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0 || >=0.2.3-rc.1 <0.3.0-0`。早期版本只写 `>=0.2.1-rc.5 <0.3.0`，而 semver 规定预发布版本只能被"同一元组上也带预发布"的比较器匹配，于是 `0.2.2-rc.1` 会被静默拒绝安装（0.1.16 的真实回归）。`scripts/check.mjs` 现在用语义断言守住这条：必须接受 `0.2.1-rc.5`/`0.2.2-rc.1`/`0.2.2`，必须拒绝 `0.3.0-rc.1`/`0.3.0`/`0.1.9`。新预发布线仍然要显式加一条，但漏加会被测试挡下，而不是靠 fail-closed 伪装成"有意为之"。
 
 ## 7. 为什么不是 fork
 
-同类实现里 `dsh-plugin-workspace-split` 1.2.4 与本插件装配方式相同，但它是固定 1–3×3 网格、无焦点/最大化、9 套 Chat 无节流、并依赖 `sidebarRight.openResource` 的 monkey-patch；`dsh-split-screen` 1.7.0 未发 npm 且只测到 rc.2；`dsh-split-view` 0.2.7 用 iframe 每格跑一个完整客户端并 shadow `root` 槽（官方 renderer 文档明确禁止 shadow root），且依赖 rc.5 已不存在的包。三者的可复用价值只有"装配方式"，而装配方式已完全掌握，因此从零实现，换取可测试、可审计、体量小（52KB）。
+装配方式（`main` keyed 面板 + 私有子槽 + `SessionProvider` + `conversation.content` 的 `embedded` 变体）在数家实现里是相同的，我们已完全掌握，所以从零实现，换取可测试、可审计、体量可控（客户端 bundle 约 105KB，零第三方依赖）。
+
+**这一节以前的版本写错过对手。** 原稿称 `dsh-split-view` 用 iframe 跑整客户端、`dsh-split-workspace` 是固定 1–3×3 网格且无焦点/最大化；按 2026-11-10 的有据评估（`.dev/market/eval/capability/matrix.json`，逐项追到源码行），iframe 路线属于 `ai-eks`，`mhlywxl` 是不限量自动网格。批评别人时用错材料，比不批评更糟，因此改为只写评估里核实过的部分：
+
+- 我们比它们强的地方：一侧栏投放走公开列表插槽（`replaceRisk: none`），不拦导航；键盘层完整（6 条命令 + 分隔线可聚焦）；命名布局库与去重；注意力路由（等待/未读，不含运行中）。
+- 我们比它们弱的地方，且短期内不会补：格数上限 4（`mhlywxl` 不限量、`byf1999` 1–3 列×1–3 行、`ai-eks` 停靠布局）；无格内文件预览/diff（`byf1999` 有）；无格内新建会话（3 家支持）；无自由拖拽重排（`mhlywxl` 有，我们只有两格交换）。
+- 这些取舍写在 `docs/SCOPE.md`：目标场景是"同一窗口盯 2–4 个自行推进的对话"，格数与预览不是这个场景的瓶颈。
 
 ## 8. 明确不做的事与原因
 
