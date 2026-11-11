@@ -184,6 +184,29 @@ if (zhKeys !== null && enKeys !== null) {
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 
+  /* Two mistakes I made twice each, so they get mechanical checks rather than care:
+     a Chinese string pasted into the English dictionary, and the same string pasted into both.
+     Both look fine in a diff and only show up for a user in the other language. */
+  const dictEntries = (start, end) => {
+    const block = client.slice(client.indexOf(start), end === null ? client.length : client.indexOf(end))
+    const out = new Map()
+    for (const match of block.matchAll(/^\s+([A-Za-z][A-Za-z0-9]*):\s*'((?:[^'\\]|\\.)*)'/gm)) out.set(match[1], match[2])
+    return out
+  }
+  const zhDict = dictEntries('MV_ZH', 'MV_EN')
+  const enDict = dictEntries('MV_EN', null)
+  const cjk = /[\u3400-\u9fff]/
+  for (const [key, value] of enDict) {
+    ok(!cjk.test(value), `English copy for "${key}" contains Chinese characters: ${JSON.stringify(value)}`)
+  }
+  for (const [key, value] of enDict) {
+    if (!zhDict.has(key)) continue
+    ok(
+      zhDict.get(key) !== value,
+      `"${key}" has the same text in both languages (${JSON.stringify(value)}); one of them was not translated`,
+    )
+  }
+
   ok(zhKeys.length >= 20, `zh dictionary looks incomplete (${zhKeys.length} keys)`)
   ok(
     JSON.stringify(zhKeys) === JSON.stringify(enKeys),
