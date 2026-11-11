@@ -465,7 +465,7 @@ function PaneFrame(props) {
   const { state, dragging } = surface
   const focused = state.focused === leaf.id
   const sessionId = leaf.sessionId
-  const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty')
+  const title = sessionId === null ? T('empty') : mvDisplayTitle(mvTitle(sessionId), T('untitled'), T('empty'))
   const status = sessionId === null ? undefined : surface.statuses.get(sessionId)
   const dot = mvDotState(status)
   const maximized = state.maximized === leaf.id
@@ -681,7 +681,7 @@ function mvUpdateCaption(update: any): string {
   if (update.status === 'installing') return T('updateInstalling')
   if (update.status === 'done') return T('updateDone')
   if (update.status === 'unsupported') return T('updateUnsupported')
-  if (update.status === 'error') return update.error ?? T('updateTitleFailed')
+  if (update.status === 'error') return mvFirstText([update.error], T('updateTitleFailed'))
   if (update.available === true) return mvFormat(T('updateAvailable'), { version: update.latest ?? '' })
   if (update.localOnly === true) return T('updateLocal')
   if (update.checkedAt > 0) return mvFormat(T('updateLatest'), { version: update.installed ?? MV_PLUGIN_VERSION })
@@ -1245,7 +1245,7 @@ function MultiviewStage(props) {
      here, otherwise the narrow layout hides exactly the thing the split exists for. */
   const chips = narrow
     ? leaves.map((leaf) => {
-        const title = leaf.sessionId === null ? T('empty') : mvTitle(leaf.sessionId) ?? T('empty')
+        const title = leaf.sessionId === null ? T('empty') : mvDisplayTitle(mvTitle(leaf.sessionId), T('untitled'), T('empty'))
         const dot = leaf.sessionId === null ? 'idle' : mvDotState(statuses.get(leaf.sessionId))
         return h(
           'button',

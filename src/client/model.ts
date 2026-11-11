@@ -121,6 +121,43 @@ export function mvSessionState(status: any): string {
 }
 
 /**
+ * First candidate that is worth showing.
+ *
+ * A chain of `??` stops at an empty string, so a blank message or title wins over the fallback and
+ * the user sees nothing. Numbers and booleans are values rather than absences, so they are stringified
+ * instead of skipped.
+ * @param candidates - values in preference order.
+ * @param fallback - returned when nothing usable is present.
+ */
+export function mvFirstText(candidates: any[], fallback: string): string {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const text = candidate.trim()
+      if (text !== '') return text
+    } else if (typeof candidate === 'number' || typeof candidate === 'boolean') {
+      return String(candidate)
+    }
+  }
+  return fallback
+}
+
+/**
+ * A never-blank title for a pane header.
+ *
+ * `title ?? fallback` is not enough: the host trims Session titles and an untitled Session therefore
+ * carries `''`, which is not nullish and slipped through to render an empty header. The host's own
+ * sidebar shows a localized "untitled" label in exactly this case.
+ * @param title - the raw title, or undefined while the record is unknown.
+ * @param fallback - localized label for a known Session with no title.
+ * @param unknown - localized label for a Session the host does not list (deleted or not yet known).
+ */
+export function mvDisplayTitle(title: any, fallback: string, unknown?: string): string {
+  if (title === undefined || title === null) return unknown === undefined ? fallback : unknown
+  const text = String(title).trim()
+  return text === '' ? fallback : text
+}
+
+/**
  * Readable label for one Workspace entry.
  *
  * A fallback chain on paper, but `??` only skips nullish values: a blank title or a path with no

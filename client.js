@@ -11,13 +11,14 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.92';
+const MV_PLUGIN_VERSION = '0.1.93';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
     panelAttentionOne: '有 1 格需要你处理',
     title: '分屏',
     empty: '选择一个会话',
+    untitled: '未命名',
     pick: '选择会话',
     pickSearch: '搜索会话',
     pickEmpty: '没有匹配的会话',
@@ -93,6 +94,7 @@ const MV_EN = {
     panelAttentionOne: '1 pane needs you',
     title: 'Split',
     empty: 'Pick a session',
+    untitled: 'Untitled',
     pick: 'Pick a session',
     pickSearch: 'Search sessions',
     pickEmpty: 'No matching session',
@@ -337,6 +339,22 @@ function mvSessionState(status) {
     if (status.running === true) return 'running';
     if (status.completionUnread === true) return 'unread';
     return 'idle';
+}
+function mvFirstText(candidates, fallback) {
+    for (const candidate of candidates){
+        if (typeof candidate === 'string') {
+            const text = candidate.trim();
+            if (text !== '') return text;
+        } else if (typeof candidate === 'number' || typeof candidate === 'boolean') {
+            return String(candidate);
+        }
+    }
+    return fallback;
+}
+function mvDisplayTitle(title, fallback, unknown) {
+    if (title === undefined || title === null) return unknown === undefined ? fallback : unknown;
+    const text = String(title).trim();
+    return text === '' ? fallback : text;
 }
 function mvWorkspaceLabel(item) {
     const title = typeof item?.title === 'string' ? item.title.trim() : '';
@@ -1552,10 +1570,13 @@ async function mvUpdateInstall() {
                 return;
             }
             if (state === 'failed' || state === 'cancelled' || state === 'rolled-back') {
-                const message = operation?.message ?? operation?.failureCode ?? state;
                 mvUpdateCommit({
                     status: 'error',
-                    error: typeof message === 'string' ? message : String(message)
+                    error: mvFirstText([
+                        operation?.message,
+                        operation?.failureCode,
+                        state
+                    ], T('updateTitleFailed'))
                 });
                 return;
             }
@@ -2306,7 +2327,7 @@ function PaneFrame(props) {
     const { state, dragging } = surface;
     const focused = state.focused === leaf.id;
     const sessionId = leaf.sessionId;
-    const title = sessionId === null ? T('empty') : mvTitle(sessionId) ?? T('empty');
+    const title = sessionId === null ? T('empty') : mvDisplayTitle(mvTitle(sessionId), T('untitled'), T('empty'));
     const status = sessionId === null ? undefined : surface.statuses.get(sessionId);
     const dot = mvDotState(status);
     const maximized = state.maximized === leaf.id;
@@ -2449,7 +2470,9 @@ function mvUpdateCaption(update) {
     if (update.status === 'installing') return T('updateInstalling');
     if (update.status === 'done') return T('updateDone');
     if (update.status === 'unsupported') return T('updateUnsupported');
-    if (update.status === 'error') return update.error ?? T('updateTitleFailed');
+    if (update.status === 'error') return mvFirstText([
+        update.error
+    ], T('updateTitleFailed'));
     if (update.available === true) return mvFormat(T('updateAvailable'), {
         version: update.latest ?? ''
     });
@@ -2918,7 +2941,7 @@ function MultiviewStage(props) {
         'data-mv-body': ''
     }, renderMvNode(narrow ? visibleLeaf : maximizedLeaf === null ? state.layout : maximizedLeaf, surface));
     const chips = narrow ? leaves.map((leaf)=>{
-        const title = leaf.sessionId === null ? T('empty') : mvTitle(leaf.sessionId) ?? T('empty');
+        const title = leaf.sessionId === null ? T('empty') : mvDisplayTitle(mvTitle(leaf.sessionId), T('untitled'), T('empty'));
         const dot = leaf.sessionId === null ? 'idle' : mvDotState(statuses.get(leaf.sessionId));
         return h('button', {
             key: 'chip-' + leaf.id,

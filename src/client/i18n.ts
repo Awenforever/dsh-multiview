@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.92'
+const MV_PLUGIN_VERSION = '0.1.93'
 
 const MV_ZH = {
   panel: '分屏',
@@ -18,6 +18,7 @@ const MV_ZH = {
   panelAttentionOne: '有 1 格需要你处理',
   title: '分屏',
   empty: '选择一个会话',
+  untitled: '未命名',
   pick: '选择会话',
   pickSearch: '搜索会话',
   pickEmpty: '没有匹配的会话',
@@ -94,6 +95,7 @@ const MV_EN = {
   panelAttentionOne: '1 pane needs you',
   title: 'Split',
   empty: 'Pick a session',
+  untitled: 'Untitled',
   pick: 'Pick a session',
   pickSearch: 'Search sessions',
   pickEmpty: 'No matching session',

@@ -30,6 +30,8 @@ import {
   mvSwapSessions,
   mvWithSession,
   mvWorkspaceLabel,
+  mvDisplayTitle,
+  mvFirstText,
 }from '../src/client/model.ts'
 
 /** Every leaf in reading order, as `[paneId, sessionId]` tuples. */
@@ -422,4 +424,48 @@ test('a workspace with nothing usable yields an empty label rather than junk', (
   assert.equal(mvWorkspaceLabel({ title: null, path: null, workspaceId: null }), '')
   /* The label must never be the literal "undefined" or "null". */
   assert.equal(mvWorkspaceLabel({ title: undefined, path: undefined }), '')
+})
+
+test('a pane title is never blank', () => {
+  /* The host trims Session titles, so an untitled Session carries ''. `??` let that through and the
+     pane header rendered empty; the host's sidebar shows a localized "untitled" label instead. */
+  assert.equal(mvDisplayTitle('重命名会话', '未命名'), '重命名会话')
+  assert.equal(mvDisplayTitle('', '未命名'), '未命名', 'an empty title falls back')
+  assert.equal(mvDisplayTitle('   ', '未命名'), '未命名', 'a whitespace title falls back')
+  assert.equal(mvDisplayTitle(undefined, '未命名'), '未命名')
+  assert.equal(mvDisplayTitle(null, '未命名'), '未命名')
+  assert.equal(mvDisplayTitle('  重命名  ', '未命名'), '重命名', 'a real title is trimmed')
+})
+
+test('a title distinguishes an unknown session from an untitled one', () => {
+  /* A deleted Session is not "untitled": the pane should say nothing is there. */
+  assert.equal(mvDisplayTitle(undefined, '未命名', '选择一个会话'), '选择一个会话')
+  assert.equal(mvDisplayTitle('', '未命名', '选择一个会话'), '未命名', 'known but untitled keeps the untitled label')
+  assert.equal(mvDisplayTitle('话题', '未命名', '选择一个会话'), '话题')
+})
+
+test('a non-string title is rendered rather than dropped', () => {
+  assert.equal(mvDisplayTitle(42, '未命名'), '42')
+  assert.equal(mvDisplayTitle(0, '未命名'), '0', 'zero is a title, not an absence')
+  assert.equal(mvDisplayTitle(false, '未命名'), 'false', 'false is a value, not an absence')
+})
+
+test('the first usable text wins, not the first non-null one', () => {
+  /* A failed market operation reported an empty message, so the dialog showed a blank error. */
+  assert.equal(mvFirstText(['磁盘已满', 'market-failed'], '失败'), '磁盘已满')
+  assert.equal(mvFirstText(['', 'market-failed'], '失败'), 'market-failed', 'an empty message is skipped')
+  assert.equal(mvFirstText(['   ', 'market-failed'], '失败'), 'market-failed', 'whitespace is skipped')
+  assert.equal(mvFirstText([undefined, null, 'market-failed'], '失败'), 'market-failed')
+  assert.equal(mvFirstText([], '失败'), '失败')
+  assert.equal(mvFirstText([undefined, null, ''], '失败'), '失败')
+})
+
+test('numbers and booleans are values, not absences', () => {
+  assert.equal(mvFirstText([0, 'later'], '失败'), '0', 'zero is a value')
+  assert.equal(mvFirstText([false, 'later'], '失败'), 'false', 'false is a value')
+  assert.equal(mvFirstText([42], '失败'), '42')
+})
+
+test('a real message is trimmed', () => {
+  assert.equal(mvFirstText(['  磁盘已满  '], '失败'), '磁盘已满')
 })

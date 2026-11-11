@@ -328,8 +328,10 @@ async function mvUpdateInstall(): Promise<void> {
         return
       }
       if (state === 'failed' || state === 'cancelled' || state === 'rolled-back') {
-        const message = operation?.message ?? operation?.failureCode ?? state
-        mvUpdateCommit({ status: 'error', error: typeof message === 'string' ? message : String(message) })
+        mvUpdateCommit({
+          status: 'error',
+          error: mvFirstText([operation?.message, operation?.failureCode, state], T('updateTitleFailed')),
+        })
         return
       }
     }
