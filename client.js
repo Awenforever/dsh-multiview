@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.50';
+const MV_PLUGIN_VERSION = '0.1.51';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -21,6 +21,7 @@ const MV_ZH = {
     pick: '选择会话',
     pickSearch: '搜索会话',
     pickEmpty: '没有匹配的会话',
+    pickNone: '还没有会话，先在左侧新建一个',
     loading: '正在打开会话…',
     openFailed: '打开会话失败：{message}',
     noContent: '当前 DSH 版本不支持在格内嵌入会话',
@@ -91,6 +92,7 @@ const MV_EN = {
     pick: 'Pick a session',
     pickSearch: 'Search sessions',
     pickEmpty: 'No matching session',
+    pickNone: 'No conversations yet — create one in the sidebar first',
     loading: 'Opening session…',
     openFailed: 'Could not open this session: {message}',
     noContent: 'This DSH version cannot host a conversation in a pane',
@@ -1859,7 +1861,7 @@ function MvPanePicker(props) {
         className: 'mv-picker-list'
     }, rows.length === 0 ? h('div', {
         className: 'mv-picker-empty'
-    }, T('pickEmpty')) : rows.map((row)=>row.kind === 'group' ? h('div', {
+    }, query.trim() === '' ? T('pickNone') : T('pickEmpty')) : rows.map((row)=>row.kind === 'group' ? h('div', {
             key: 'group-' + row.id,
             className: 'mv-picker-group',
             role: 'presentation'

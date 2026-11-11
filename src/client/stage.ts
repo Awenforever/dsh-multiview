@@ -183,7 +183,14 @@ function MvPanePicker(props) {
       'div',
       { className: 'mv-picker-list' },
       rows.length === 0
-        ? h('div', { className: 'mv-picker-empty' }, T('pickEmpty'))
+        ? h(
+            'div',
+            { className: 'mv-picker-empty' },
+            /* Two different situations, two different sentences: a filter that matches nothing
+               versus a host where no conversation exists yet. "No matches" is misleading for a
+               first run, where there is nothing to match in the first place. */
+            query.trim() === '' ? T('pickNone') : T('pickEmpty'),
+          )
         : rows.map((row) =>
             row.kind === 'group'
               ? h('div', { key: 'group-' + row.id, className: 'mv-picker-group', role: 'presentation' }, row.title)

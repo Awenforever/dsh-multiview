@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.50'
+const MV_PLUGIN_VERSION = '0.1.51'
 
 const MV_ZH = {
   panel: '分屏',
@@ -21,6 +21,7 @@ const MV_ZH = {
   pick: '选择会话',
   pickSearch: '搜索会话',
   pickEmpty: '没有匹配的会话',
+  pickNone: '还没有会话，先在左侧新建一个',
   loading: '正在打开会话…',
   openFailed: '打开会话失败：{message}',
   noContent: '当前 DSH 版本不支持在格内嵌入会话',
@@ -92,6 +93,7 @@ const MV_EN = {
   pick: 'Pick a session',
   pickSearch: 'Search sessions',
   pickEmpty: 'No matching session',
+  pickNone: 'No conversations yet — create one in the sidebar first',
   loading: 'Opening session…',
   openFailed: 'Could not open this session: {message}',
   noContent: 'This DSH version cannot host a conversation in a pane',

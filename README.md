@@ -55,6 +55,14 @@ The divider itself is a focusable separator: `←`/`→` (or `↑`/`↓` on a st
 
 > The browser (Web) shell gets **no default bindings**: DSH's shortcut layer accepts a very narrow set of web/Linux combinations, and forcing one fails at boot with "reserved". Desktop defaults work; bind them manually on Web.
 
+### Corners worth knowing
+
+- **Two panes is the floor.** An empty pane cannot be removed from a two-pane split (its ✕ is hidden), because every preset, the `2` `3` `4` chips and the saved-split key assume at least two.
+- **Archiving leaves the split.** Archive a conversation anywhere and its pane empties at once; the pane stays where it was.
+- **Shrinking keeps what you are watching.** Going from four panes to two drops two conversations, and the focused one always survives — it takes the first seat.
+- **Maximize needs a conversation.** An empty pane offers no ⤢: enlarging a picker would hide every other conversation.
+- **Old splits heal.** Applying a saved split whose Sessions were deleted or archived restores the shape and empties only those panes; the saved entry is kept (never silently deleted) and rewritten to what could actually be restored.
+
 ## Not supported in v1 (on purpose)
 
 1. **File preview / diff inside a pane** — whenever any global panel is active, DSH unmounts the right sidebar's session surface (`no session surface is mounted`; shipped panels behave the same). Use ↗ to work in the native view.

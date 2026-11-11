@@ -1169,3 +1169,62 @@ test('the pane header offers maximize only where it does something', () => {
   assert.equal(countLabel(tree, 'maximize'), 2, 'only bound panes offer maximize')
   assert.equal(countLabel(tree, 'remove'), 3, 'every pane can still be cleared or removed at three panes')
 })
+
+test('the empty picker distinguishes "no conversations yet" from "no matches"', () => {
+  const renderPicker = (list) => {
+    const { context } = bootWithHook(
+      {
+        version: 3,
+        layout: {
+          kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+          a: { kind: 'leaf', id: 'p1', sessionId: null },
+          b: { kind: 'leaf', id: 'p2', sessionId: null },
+        },
+        focused: 'p1',
+        preset: 2,
+        seeded: true,
+        currentViewId: null,
+        views: [],
+      },
+      undefined,
+      { sessionsList: () => list },
+    )
+    const main = context.registered.find((entry) => entry.name === 'main')
+    return expand(
+      main.component({
+        renderSlot: () => null,
+        SessionProvider: ({ children }) => children,
+        useSessions: (selector) => selector(list),
+        useSessionStatus: (selector) => selector(new Map()),
+      }),
+    )
+  }
+
+  const emptyTexts = (tree) => {
+    const out = []
+    const walk = (node) => {
+      if (node == null || typeof node !== 'object') return
+      if (Array.isArray(node)) { node.forEach(walk); return }
+      if (node.props && node.props.className === 'mv-picker-empty') {
+        for (const child of node.children ?? []) if (typeof child === 'string') out.push(child)
+      }
+      for (const child of node.children ?? []) walk(child)
+    }
+    walk(tree)
+    return out
+  }
+
+  /* A host with no Sessions at all: the picker explains what to do. */
+  const noSessions = renderPicker({ phase: 'ready', ids: [], byId: {} })
+  const firstRun = emptyTexts(noSessions)
+  assert.ok(firstRun.length >= 1, 'a first run must say something')
+  assert.ok(firstRun.every((entry) => entry === 'pickNone'), 'a first run uses the "no conversations yet" copy, got ' + JSON.stringify(firstRun))
+
+  /* Sessions exist but the filter matches none: the other sentence. */
+  const withSessions = renderPicker({
+    phase: 'ready',
+    ids: ['s1'],
+    byId: { s1: { id: 's1', title: 'Alpha', blank: false } },
+  })
+  assert.equal(emptyTexts(withSessions).length, 0, 'with one Session the picker lists it instead of a message')
+})
