@@ -215,10 +215,7 @@ async function mvUpdateRegistryLatest(): Promise<string | null> {
  */
 async function mvUpdateCheck(force?: boolean): Promise<void> {
   const now = Date.now()
-  if (force !== true) {
-    if (now - mvUpdateState.checkedAt < MV_CHECK_INTERVAL) return
-    if (mvUpdateState.nextAt > now) return
-  }
+  if (force !== true && !mvUpdateDue(mvUpdateState.checkedAt, mvUpdateState.nextAt, now, MV_CHECK_INTERVAL)) return
   if (mvUpdateState.status === 'checking' || mvUpdateState.status === 'installing') return
   mvUpdateCommit({ status: 'checking', error: null })
 
@@ -255,14 +252,14 @@ async function mvUpdateCheck(force?: boolean): Promise<void> {
 
   if (latest === null) {
     const failures = mvUpdateState.failures + 1
-    const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX)
+    /* `checkedAt` keeps the last *successful* check: advancing it here was what made the retry
+       window meaningless, because the interval gate then blocked the backoff's own schedule. */
     mvUpdateCommit({
       status: marketReady ? 'error' : 'unsupported',
       available: false,
       latest: null,
       failures,
-      checkedAt: now,
-      nextAt: now + delay,
+      nextAt: now + mvBackoffDelay(failures, MV_BACKOFF_BASE, MV_BACKOFF_MAX),
       error: failure ?? T('updateNoVersion'),
     })
     return

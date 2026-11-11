@@ -625,6 +625,15 @@ function mvKeyCap(code) {
 function mvShortcutHint(code) {
     return 'Mod+Alt+' + mvKeyCap(code);
 }
+function mvUpdateDue(checkedAt, nextAt, now, interval) {
+    if (!(now - checkedAt >= interval)) return false;
+    return nextAt <= now;
+}
+function mvBackoffDelay(failures, base, max) {
+    const count = Number.isFinite(failures) && failures >= 1 ? Math.floor(failures) : 1;
+    const doublings = Math.min(count - 1, 40);
+    return Math.min(base * Math.pow(2, doublings), max);
+}
 function mvVersionParts(version) {
     const withoutBuild = String(version).split('+')[0];
     const dash = withoutBuild.indexOf('-');
@@ -1415,10 +1424,7 @@ async function mvUpdatePost(url, body) {
 }
 async function mvUpdateCheck(force) {
     const now = Date.now();
-    if (force !== true) {
-        if (now - mvUpdateState.checkedAt < MV_CHECK_INTERVAL) return;
-        if (mvUpdateState.nextAt > now) return;
-    }
+    if (force !== true && !mvUpdateDue(mvUpdateState.checkedAt, mvUpdateState.nextAt, now, MV_CHECK_INTERVAL)) return;
     if (mvUpdateState.status === 'checking' || mvUpdateState.status === 'installing') return;
     mvUpdateCommit({
         status: 'checking',
@@ -1452,14 +1458,12 @@ async function mvUpdateCheck(force) {
     }
     if (latest === null) {
         const failures = mvUpdateState.failures + 1;
-        const delay = Math.min(MV_BACKOFF_BASE * Math.pow(2, failures - 1), MV_BACKOFF_MAX);
         mvUpdateCommit({
             status: marketReady ? 'error' : 'unsupported',
             available: false,
             latest: null,
             failures,
-            checkedAt: now,
-            nextAt: now + delay,
+            nextAt: now + mvBackoffDelay(failures, MV_BACKOFF_BASE, MV_BACKOFF_MAX),
             error: failure ?? T('updateNoVersion')
         });
         return;

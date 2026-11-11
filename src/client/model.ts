@@ -514,6 +514,36 @@ export function mvShortcutHint(code: string): string {
   return 'Mod+Alt+' + mvKeyCap(code)
 }
 
+/**
+ * Whether a scheduled update check may run now.
+ *
+ * Two independent conditions: the last **successful** check is at least one interval old, and any
+ * backoff window has expired. Keeping them separate is what lets a failure retry sooner than a
+ * success — the previous code advanced the success timestamp on failure too, which made the backoff
+ * unreachable.
+ * @param checkedAt - when the last successful check finished (0 when never).
+ * @param nextAt - earliest moment a retry may run.
+ * @param now - current time.
+ * @param interval - the normal check interval.
+ */
+export function mvUpdateDue(checkedAt: number, nextAt: number, now: number, interval: number): boolean {
+  if (!(now - checkedAt >= interval)) return false
+  return nextAt <= now
+}
+
+/**
+ * Retry delay after consecutive failures: exponential, capped.
+ * @param failures - consecutive failure count, 1 for the first.
+ * @param base - first delay.
+ * @param max - ceiling.
+ */
+export function mvBackoffDelay(failures: number, base: number, max: number): number {
+  const count = Number.isFinite(failures) && failures >= 1 ? Math.floor(failures) : 1
+  /* Guard the exponent: Math.pow(2, 1000) is Infinity, and min() would hide the intent. */
+  const doublings = Math.min(count - 1, 40)
+  return Math.min(base * Math.pow(2, doublings), max)
+}
+
 /** Split a version into its numeric core and its prerelease identifiers. */
 function mvVersionParts(version: string): { core: number[]; pre: string[] } {
   const withoutBuild = String(version).split('+')[0]

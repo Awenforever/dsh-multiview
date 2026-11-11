@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mvVersionGt } from '../src/client/model.ts'
+import { mvVersionGt, mvUpdateDue, mvBackoffDelay } from '../src/client/model.ts'
 
 function makeRandom(seed) {
   let state = seed >>> 0
@@ -86,5 +86,53 @@ test('a prerelease never outranks its own final', () => {
     const pre = `${['alpha', 'beta', 'rc'][between(random, 0, 2)]}.${between(random, 0, 9)}`
     assert.equal(mvVersionGt(core + '-' + pre, core), false, `seed ${seed}: ${core}-${pre} is not newer than ${core}`)
     assert.equal(mvVersionGt(core, core + '-' + pre), true, `seed ${seed}: ${core} is newer than ${core}-${pre}`)
+  }
+})
+
+const HOUR = 60 * 60 * 1000
+const DAY = 24 * HOUR
+const INTERVAL = DAY
+const BASE = HOUR
+const MAX = 12 * HOUR
+
+test('the retry delay doubles from one hour and then stays capped', () => {
+  const expected = [1, 2, 4, 8, 12, 12, 12]
+  expected.forEach((hours, index) => {
+    const failures = index + 1
+    assert.equal(mvBackoffDelay(failures, BASE, MAX), hours * HOUR, `failure ${failures} waits ${hours}h`)
+  })
+  /* Junk counts behave like the first failure instead of producing NaN or Infinity. */
+  assert.equal(mvBackoffDelay(0, BASE, MAX), BASE)
+  assert.equal(mvBackoffDelay(-3, BASE, MAX), BASE)
+  assert.equal(mvBackoffDelay(Number.NaN, BASE, MAX), BASE)
+  assert.equal(mvBackoffDelay(1000, BASE, MAX), MAX, 'a huge count still lands on the cap')
+})
+
+test('a failure may retry sooner than a full interval — the bug that made the backoff inert', () => {
+  const start = 1_000_000
+  /* First check succeeded a long time ago; then a check failed an hour back. */
+  const checkedAt = start - 30 * DAY
+  const now = start
+
+  /* Old behaviour: the failure stamped checkedAt=now, so the interval gate blocked this retry. */
+  assert.equal(mvUpdateDue(now, start + HOUR, now, INTERVAL), false, 'stamping checkedAt=now blocks the retry')
+
+  /* Correct behaviour: last success is old, the backoff window has passed, so the retry runs. */
+  assert.equal(mvUpdateDue(checkedAt, start, now, INTERVAL), true, 'the retry becomes due')
+
+  /* And the backoff window itself is honoured. */
+  assert.equal(mvUpdateDue(checkedAt, now + 1, now, INTERVAL), false, 'a future nextAt still blocks')
+})
+
+test('the schedule gate is a strict conjunction', () => {
+  const cases = [
+    { checkedAt: 0, nextAt: 100, now: DAY, expect: true, why: 'never checked, window passed' },
+    { checkedAt: 100, nextAt: 100, now: 100, expect: false, why: 'just checked' },
+    { checkedAt: 0, nextAt: 101, now: 100, expect: false, why: 'window not reached' },
+    { checkedAt: 0, nextAt: 100, now: 99, expect: false, why: 'interval not elapsed' },
+    { checkedAt: 0, nextAt: 0, now: DAY, expect: true, why: 'a full interval passed' },
+  ]
+  for (const item of cases) {
+    assert.equal(mvUpdateDue(item.checkedAt, item.nextAt, item.now, INTERVAL), item.expect, item.why)
   }
 })
