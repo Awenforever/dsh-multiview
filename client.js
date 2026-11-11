@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.30';
+const MV_PLUGIN_VERSION = '0.1.31';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -304,6 +304,15 @@ function mvLeaves(node, out) {
     mvLeaves(node.b, list);
     return list;
 }
+function mvSessionSet(node) {
+    const ids = mvLeaves(node).map((leaf)=>leaf.sessionId).filter((sessionId)=>sessionId !== null && sessionId !== undefined && sessionId !== '');
+    return [
+        ...new Set(ids)
+    ].sort().join(',');
+}
+function mvArrangementKey(node) {
+    return mvSessionSet(node) + '@' + String(mvLeaves(node).length);
+}
 function mvLeafCount(node) {
     return mvLeaves(node).length;
 }
@@ -523,6 +532,27 @@ function mvScheduleSave() {
 function mvViewKey(layout) {
     return mvLeaves(layout).map((leaf)=>leaf.sessionId).filter((sessionId)=>sessionId !== null).join(',');
 }
+function mvViewSet(layout) {
+    return mvArrangementKey(layout);
+}
+function mvNormalizeViews(views) {
+    const best = new Map();
+    const order = [];
+    for (const view of views){
+        const set = mvViewSet(view.layout);
+        if (set === '') continue;
+        const seen = best.get(set);
+        if (seen === undefined) {
+            best.set(set, view);
+            order.push(set);
+            continue;
+        }
+        const newer = (view.savedAt ?? 0) > (seen.savedAt ?? 0);
+        const preferred = newer || typeof seen.customName !== 'string' && typeof view.customName === 'string' ? view : seen;
+        best.set(set, preferred);
+    }
+    return order.map((set)=>best.get(set));
+}
 function mvViewName(layout) {
     let list = null;
     try {
@@ -569,7 +599,21 @@ function mvSyncView(next) {
             views: views.map((view)=>view.id === existing.id ? {
                     ...view,
                     layout: next.layout,
-                    name: mvViewName(next.layout)
+                    name: typeof view.customName === 'string' ? view.customName : mvViewName(next.layout)
+                } : view)
+        };
+    }
+    const set = mvViewSet(next.layout);
+    const sameSet = views.find((view)=>mvViewSet(view.layout) === set);
+    if (sameSet !== undefined) {
+        return {
+            ...next,
+            currentViewId: sameSet.id,
+            views: views.map((view)=>view.id === sameSet.id ? {
+                    ...view,
+                    layout: next.layout,
+                    name: typeof view.customName === 'string' ? view.customName : mvViewName(next.layout),
+                    savedAt: Date.now()
                 } : view)
         };
     }
@@ -625,7 +669,7 @@ function mvHydrate() {
     if (layout === null) return;
     const leaves = mvLeaves(layout);
     const focused = leaves.some((leaf)=>leaf.id === raw.focused) ? raw.focused : leaves[0].id;
-    const views = Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view)=>view !== null) : [];
+    const views = mvNormalizeViews(Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view)=>view !== null) : []);
     const currentViewId = typeof raw.currentViewId === 'string' && views.some((view)=>view.id === raw.currentViewId) ? raw.currentViewId : null;
     mvState = {
         layout,

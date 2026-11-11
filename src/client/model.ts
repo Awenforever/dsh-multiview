@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Pure layout algebra for the stage.
  *
  * A layout is a binary tree of splits whose leaves are panes. Everything here is
@@ -65,6 +65,34 @@ export function mvLeaves(node: any, out: any[]): any[] {
   mvLeaves(node.a, list)
   mvLeaves(node.b, list)
   return list
+}
+
+/**
+ * Which Sessions a split holds, ignoring how they are arranged.
+ *
+ * Two arrangements of the same Sessions are the same working set; this is what lets
+ * "move a pane" update a saved split instead of creating a near-duplicate.
+ * @param node - a split tree.
+ * @returns sorted, de-duplicated Session ids joined with commas.
+ */
+export function mvSessionSet(node: any): string {
+  const ids = mvLeaves(node)
+    .map((leaf) => leaf.sessionId)
+    .filter((sessionId) => sessionId !== null && sessionId !== undefined && sessionId !== '')
+  return [...new Set(ids)].sort().join(',')
+}
+
+/**
+ * Identity of a saved split: which Sessions, and how many panes.
+ *
+ * Same Sessions in the same shape are one arrangement no matter how the panes are
+ * ordered, so moving a pane updates its entry instead of adding one. A different pane
+ * count is a different arrangement and earns its own entry.
+ * @param node - a split tree.
+ * @returns `sessions@count`, e.g. `a,b@3`.
+ */
+export function mvArrangementKey(node: any): string {
+  return mvSessionSet(node) + '@' + String(mvLeaves(node).length)
 }
 
 /** Pane count of one tree. */

@@ -15,6 +15,8 @@ import {
   mvRemoveLeaf,
   mvResize,
   mvSanitize,
+  mvArrangementKey,
+  mvSessionSet,
   mvShapeTo,
   mvSwapSessions,
   mvWithSession,
@@ -161,4 +163,31 @@ test('leaf lookup and binding helpers agree', () => {
   const tree = mvWithSession(mvPreset(3), 'p2', 'x')
   assert.equal(mvLeafById(tree, 'p2').sessionId, 'x')
   assert.equal(mvLeafById(tree, 'missing'), undefined)
+})
+
+test('a session set ignores arrangement, which is what stops duplicate saved splits', () => {
+  const two = mvWithSession(mvWithSession(mvPreset(2), 'p1', 'a'), 'p2', 'b')
+  const swapped = mvSwapSessions(two, 'p1', 'p2')
+  /* Different arrangement, same working set. */
+  assert.notEqual(mvLeaves(two).map((leaf) => leaf.sessionId).join(','), mvLeaves(swapped).map((leaf) => leaf.sessionId).join(','))
+  assert.equal(mvSessionSet(two), mvSessionSet(swapped))
+  assert.equal(mvSessionSet(two), 'a,b')
+  /* A third pane is a different set, so it earns its own entry. */
+  const three = mvWithSession(mvShapeTo(two, 3), 'p3', 'c')
+  assert.equal(mvSessionSet(three), 'a,b,c')
+  assert.notEqual(mvSessionSet(three), mvSessionSet(two))
+  /* Empty panes never contribute. */
+  assert.equal(mvSessionSet(mvPreset(4)), '')
+})
+
+test('an arrangement key separates a swap from a shape change', () => {
+  const two = mvWithSession(mvWithSession(mvPreset(2), 'p1', 'a'), 'p2', 'b')
+  const swapped = mvSwapSessions(two, 'p1', 'p2')
+  /* Same Sessions, same pane count: one arrangement, two orders. */
+  assert.equal(mvArrangementKey(two), mvArrangementKey(swapped))
+  assert.equal(mvArrangementKey(two), 'a,b@2')
+  /* Same Sessions, more panes: a different arrangement. */
+  const three = mvShapeTo(two, 3)
+  assert.equal(mvArrangementKey(three), 'a,b@3')
+  assert.notEqual(mvArrangementKey(three), mvArrangementKey(two))
 })

@@ -66,6 +66,45 @@ function mvViewKey(layout: any): string {
     .join(',')
 }
 
+/**
+ * Which Sessions a split holds, regardless of how they are arranged.
+ *
+ * `mvViewKey` is order-sensitive, so swapping two panes used to look like a brand
+ * new split and spawn a near-duplicate entry. Two arrangements of the same Sessions
+ * are the same working set: the second one updates the saved split instead.
+ * @param layout - a split tree.
+ * @returns sorted, de-duplicated Session ids joined with commas.
+ */
+function mvViewSet(layout: any): string {
+  return mvArrangementKey(layout)
+}
+
+/**
+ * Collapse saved splits that hold the same Sessions, keeping the most recently saved.
+ * Older builds created one entry per arrangement, so existing profiles can carry
+ * duplicates that the new rule would not create.
+ * @param views - saved splits in stored order.
+ * @returns the de-duplicated list, order preserved by first appearance.
+ */
+function mvNormalizeViews(views: any[]): any[] {
+  const best = new Map()
+  const order = []
+  for (const view of views) {
+    const set = mvViewSet(view.layout)
+    if (set === '') continue
+    const seen = best.get(set)
+    if (seen === undefined) {
+      best.set(set, view)
+      order.push(set)
+      continue
+    }
+    const newer = (view.savedAt ?? 0) > (seen.savedAt ?? 0)
+    const preferred = newer || (typeof seen.customName !== 'string' && typeof view.customName === 'string') ? view : seen
+    best.set(set, preferred)
+  }
+  return order.map((set) => best.get(set))
+}
+
 /** Readable label for a split: the joined Session titles. */
 function mvViewName(layout: any): string {
   let list = null
@@ -129,7 +168,33 @@ function mvSyncView(next: any): any {
       ...next,
       currentViewId: existing.id,
       views: views.map((view) =>
-        view.id === existing.id ? { ...view, layout: next.layout, name: mvViewName(next.layout) } : view,
+        view.id === existing.id
+          ? {
+              ...view,
+              layout: next.layout,
+              name: typeof view.customName === 'string' ? view.customName : mvViewName(next.layout),
+            }
+          : view,
+      ),
+    }
+  }
+  /* Same Sessions, different arrangement: adopt that saved split instead of adding a
+     near-duplicate. Moving a pane should not grow the list. */
+  const set = mvViewSet(next.layout)
+  const sameSet = views.find((view) => mvViewSet(view.layout) === set)
+  if (sameSet !== undefined) {
+    return {
+      ...next,
+      currentViewId: sameSet.id,
+      views: views.map((view) =>
+        view.id === sameSet.id
+          ? {
+              ...view,
+              layout: next.layout,
+              name: typeof view.customName === 'string' ? view.customName : mvViewName(next.layout),
+              savedAt: Date.now(),
+            }
+          : view,
       ),
     }
   }
@@ -182,7 +247,9 @@ function mvHydrate(): void {
   if (layout === null) return
   const leaves = mvLeaves(layout)
   const focused = leaves.some((leaf) => leaf.id === raw.focused) ? raw.focused : leaves[0].id
-  const views = Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view) => view !== null) : []
+  const views = mvNormalizeViews(
+    Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view) => view !== null) : [],
+  )
   const currentViewId =
     typeof raw.currentViewId === 'string' && views.some((view) => view.id === raw.currentViewId)
       ? raw.currentViewId
