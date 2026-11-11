@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.46';
+const MV_PLUGIN_VERSION = '0.1.47';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -862,11 +862,18 @@ function mvBind(leafId, sessionId) {
         const layout = mvWithSession(current.layout, leafId, sessionId);
         if (layout === current.layout) return current;
         const focused = sessionId === null ? current.focused : leafId;
+        let maximized = current.maximized;
+        if (maximized !== null) {
+            const before = mvLeafById(current.layout, maximized);
+            const after = mvLeafById(layout, maximized);
+            const unchanged = before !== null && after !== null && before.sessionId === after.sessionId;
+            if (!unchanged) maximized = null;
+        }
         return {
             ...current,
             layout,
             focused,
-            maximized: current.maximized === leafId ? null : current.maximized
+            maximized
         };
     });
 }

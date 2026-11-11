@@ -1043,3 +1043,59 @@ test('the pane header hides remove where it cannot act', () => {
   }, 'p1')
   assert.equal(findRemoveButtons(threePanes).length, 3, 'above the minimum every pane offers remove')
 })
+
+test('the maximize claim survives only while its pane keeps its Session', () => {
+  const three = {
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'split', id: 's2', dir: 'col', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+      b: { kind: 'leaf', id: 'p3', sessionId: null } },
+  }
+  const seed = {
+    version: 3,
+    layout: three,
+    focused: 'p2',
+    preset: 3,
+    seeded: true,
+    currentViewId: null,
+    views: [],
+  }
+
+  /* Maximizing then clearing the pane drops the claim. */
+  const cleared = bootWithHook(seed).hook
+  cleared.maximize('p2')
+  assert.equal(cleared.state().maximized, 'p2', 'maximize records the pane')
+  cleared.bind('p2', null)
+  assert.equal(cleared.state().maximized, null, 'an emptied pane cannot stay maximized')
+
+  /* Moving the maximized Session into another pane clears the pane it left, so the claim goes. */
+  const moved = bootWithHook(seed).hook
+  moved.maximize('p2')
+  moved.bind('p1', 's2')
+  const movedState = moved.state()
+  assert.equal(movedState.maximized, null, 'moving the watched Session away drops the claim')
+  assert.equal(leavesOf(moved)[0].sessionId, 's2', 'the Session really moved to the target pane')
+
+  /* A bind that does not disturb the maximized pane keeps the claim: the user is still watching it. */
+  const undisturbed = bootWithHook(seed).hook
+  undisturbed.maximize('p2')
+  undisturbed.bind('p3', 's3')
+  assert.equal(undisturbed.state().maximized, 'p2', 'binding an unrelated pane must not drop the claim')
+
+  /* Switching to another saved split drops it too. */
+  const switched = bootWithHook({
+    ...seed,
+    views: [{
+      id: 'other', name: 'Other', savedAt: 1,
+      layout: {
+        kind: 'split', id: 's9', dir: 'row', ratio: 0.5,
+        a: { kind: 'leaf', id: 'p1', sessionId: 's3' },
+        b: { kind: 'leaf', id: 'p2', sessionId: null },
+      },
+    }],
+  }).hook
+  switched.maximize('p2')
+  switched.openFor('s3')
+  assert.equal(switched.state().maximized, null, 'switching splits drops the maximize claim')
+})

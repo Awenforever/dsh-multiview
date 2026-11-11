@@ -377,7 +377,18 @@ function mvBind(leafId: string, sessionId: string | null): void {
     const layout = mvWithSession(current.layout, leafId, sessionId)
     if (layout === current.layout) return current
     const focused = sessionId === null ? current.focused : leafId
-    return { ...current, layout, focused, maximized: current.maximized === leafId ? null : current.maximized }
+    /* Binding can also clear the *other* pane that held this Session. If the maximized pane was
+       that one, its content just vanished: keeping the claim would show an empty maximized window
+       while the conversation the user was watching hides in a pane that is not rendered. So the
+       claim survives only while the maximized pane keeps the Session it had. */
+    let maximized = current.maximized
+    if (maximized !== null) {
+      const before = mvLeafById(current.layout, maximized)
+      const after = mvLeafById(layout, maximized)
+      const unchanged = before !== null && after !== null && before.sessionId === after.sessionId
+      if (!unchanged) maximized = null
+    }
+    return { ...current, layout, focused, maximized }
   })
 }
 
