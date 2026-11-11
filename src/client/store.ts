@@ -442,7 +442,10 @@ function mvRemovePane(leafId: string): void {
       return cleared === current.layout ? current : { ...current, layout: cleared, focused: leafId }
     }
     const leaves = mvLeaves(current.layout)
-    if (leaves.length <= 1) return current
+    /* Two panes is the product minimum (presets, the chips and the saved-split key all assume
+       it), so an empty pane in a two-pane split cannot be removed — the button is hidden for
+       that case, and this guard keeps the keyboard command honest too. */
+    if (leaves.length <= 2) return current
     const layout = mvRemoveLeaf(current.layout, leafId)
     if (layout === null) return current
     const nextLeaves = mvLeaves(layout)

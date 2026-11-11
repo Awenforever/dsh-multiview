@@ -359,6 +359,9 @@ function PaneFrame(props) {
   const status = sessionId === null ? undefined : surface.statuses.get(sessionId)
   const dot = mvDotState(status)
   const maximized = state.maximized === leaf.id
+  /* A bound pane's ✕ clears it; an empty pane's ✕ removes the pane, which is impossible at the
+     two-pane minimum. Hide the button rather than offering an action that cannot happen. */
+  const removable = sessionId !== null || mvLeaves(state.layout).length > 2
 
   return h(
     'div',
@@ -411,7 +414,9 @@ function PaneFrame(props) {
               path: MV_ICON.external,
               onClick: () => surface.onOpenMain(sessionId),
             }),
-        h(MvIconButton, { label: T('remove'), path: MV_ICON.close, onClick: () => surface.onRemove(leaf.id) }),
+        removable
+          ? h(MvIconButton, { label: T('remove'), path: MV_ICON.close, onClick: () => surface.onRemove(leaf.id) })
+          : null,
       ),
     ),
     h(

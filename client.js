@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.45';
+const MV_PLUGIN_VERSION = '0.1.46';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -930,7 +930,7 @@ function mvRemovePane(leafId) {
             };
         }
         const leaves = mvLeaves(current.layout);
-        if (leaves.length <= 1) return current;
+        if (leaves.length <= 2) return current;
         const layout = mvRemoveLeaf(current.layout, leafId);
         if (layout === null) return current;
         const nextLeaves = mvLeaves(layout);
@@ -1991,6 +1991,7 @@ function PaneFrame(props) {
     const status = sessionId === null ? undefined : surface.statuses.get(sessionId);
     const dot = mvDotState(status);
     const maximized = state.maximized === leaf.id;
+    const removable = sessionId !== null || mvLeaves(state.layout).length > 2;
     return h('div', {
         className: 'mv-pane',
         'data-pane-id': leaf.id,
@@ -2028,11 +2029,11 @@ function PaneFrame(props) {
         label: T('openMain'),
         path: MV_ICON.external,
         onClick: ()=>surface.onOpenMain(sessionId)
-    }), h(MvIconButton, {
+    }), removable ? h(MvIconButton, {
         label: T('remove'),
         path: MV_ICON.close,
         onClick: ()=>surface.onRemove(leaf.id)
-    }))), h('div', {
+    }) : null)), h('div', {
         className: 'mv-pane-body'
     }, sessionId === null ? h(MvPanePicker, {
         onPick: (id)=>surface.onBind(leaf.id, id),

@@ -930,3 +930,116 @@ test('opening a conversation lands on a valid pane, whatever shape it switches t
   assert.equal(leavesOf(adHoc)[0].sessionId, 's3', 'an unknown Session starts a fresh split holding it')
   assert.equal(leavesOf(adHoc).length, 2, 'the fresh split keeps the product minimum of two panes')
 })
+
+/** The registered main panel component, from a freshly applied bundle. */
+function stageComponentOf() {
+  const { hook, context } = bootWithHook({
+    version: 3,
+    layout: {
+      kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+      b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+    },
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    currentViewId: null,
+    views: [],
+  })
+  assert.ok(hook !== undefined)
+  const main = context.registered.find((entry) => entry.name === 'main')
+  assert.ok(main !== undefined, 'main panel was not registered')
+  return main.component
+}
+
+test('the split never drops below the two-pane minimum', () => {
+  const seed = {
+    version: 3,
+    layout: {
+      kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+      b: { kind: 'leaf', id: 'p2', sessionId: null },
+    },
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    currentViewId: null,
+    views: [],
+  }
+  const { hook } = bootWithHook(seed)
+
+  /* Removing the only empty pane of a two-pane split must be refused. */
+  hook.remove('p2')
+  assert.equal(leavesOf(hook).length, 2, 'the split cannot drop to one pane')
+
+  /* With three panes the same removal is allowed and the shape shrinks to two. */
+  hook.shape(3)
+  const emptyLeaf = leavesOf(hook).find((leaf) => leaf.sessionId === null)
+  assert.ok(emptyLeaf !== undefined, 'the third pane starts empty')
+  hook.remove(emptyLeaf.id)
+  assert.equal(leavesOf(hook).length, 2, 'an empty pane is removable while three exist')
+
+  /* A bound pane is never removed — it is cleared, keeping the shape. */
+  hook.shape(3)
+  const first = leavesOf(hook)[0]
+  hook.remove(first.id)
+  assert.equal(leavesOf(hook).length, 3, 'removing a bound pane keeps the shape')
+  assert.equal(leavesOf(hook)[0].sessionId, null, 'a bound pane is cleared, not removed')
+})
+
+test('the pane header hides remove where it cannot act', () => {
+  /* Boot one bundle per case and render the component from THAT boot: a second boot would
+     install its own store and the render would show the wrong layout. */
+  const renderStage = (layout, focused) => {
+    const { context } = bootWithHook({
+      version: 3,
+      layout,
+      focused,
+      preset: 4,
+      seeded: true,
+      currentViewId: null,
+      views: [],
+    })
+    const main = context.registered.find((entry) => entry.name === 'main')
+    assert.ok(main !== undefined, 'main panel was not registered')
+    return expand(
+      main.component({
+        renderSlot: () => null,
+        SessionProvider: ({ children }) => children,
+        useSessions: (selector) => selector(SESSIONS),
+        useSessionStatus: (selector) => selector(new Map()),
+      }),
+    )
+  }
+
+  const findRemoveButtons = (tree) => {
+    const out = []
+    const walk = (node) => {
+      if (node == null || typeof node !== 'object') return
+      if (Array.isArray(node)) { node.forEach(walk); return }
+      const label = node.props && node.props['aria-label']
+      if (typeof label === 'string' && label === 'remove') out.push(node)
+      for (const child of node.children ?? []) walk(child)
+    }
+    walk(tree)
+    return out
+  }
+
+  /* Two panes, one empty: the empty pane must not offer remove. */
+  const twoPanes = renderStage({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'leaf', id: 'p2', sessionId: null },
+  }, 'p1')
+  assert.equal(findRemoveButtons(twoPanes).length, 1, 'only the bound pane offers remove at the minimum')
+
+  /* Three panes: the empty one can be removed again. */
+  const threePanes = renderStage({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'split', id: 's2', dir: 'col', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p2', sessionId: null },
+      b: { kind: 'leaf', id: 'p3', sessionId: 's2' } },
+  }, 'p1')
+  assert.equal(findRemoveButtons(threePanes).length, 3, 'above the minimum every pane offers remove')
+})
