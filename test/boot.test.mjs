@@ -784,14 +784,18 @@ test('archiving while the split is open drops the Session, and nothing else move
   )
   assert.equal(hook.state().focused, 'p2', 'focus stays on the pane the user was on')
 
-  /* When the focused pane is the archived one, focus falls back to a pane that still exists. */
+  /* Archiving the focused pane's Session empties that pane but keeps it, so focus is still
+     valid — panes are only emptied, never removed. */
   archived = ['s2']
   hook.clearArchived()
-  assert.equal(
-    leavesOf(hook).some((leaf) => leaf.id === hook.state().focused),
-    true,
-    'focus never points at a pane that no longer exists',
+  const remaining = leavesOf(hook)
+  assert.equal(remaining.length, 2, 'the pane is kept, not removed')
+  assert.deepEqual(
+    remaining.map((leaf) => leaf.sessionId),
+    [null, null],
+    'both panes are empty once both Sessions are archived',
   )
+  assert.equal(hook.state().focused, 'p2', 'focus is unchanged because the pane still exists')
 
   /* A host that does not publish an archived set must not break anything. */
   const bare = bootWithHook({

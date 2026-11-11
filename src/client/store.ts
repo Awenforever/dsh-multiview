@@ -278,9 +278,9 @@ function mvClearArchived(): void {
   try {
     const kept = mvReconcileTree(mvState.layout, (sessionId) => (mvIsArchived(sessionId) ? null : sessionId))
     if (kept === mvState.layout) return
-    const leaves = mvLeaves(kept)
-    const focused = leaves.some((leaf) => leaf.id === mvState.focused) ? mvState.focused : leaves[0].id
-    mvCommit((current) => ({ ...current, layout: kept, focused }))
+    /* Panes are only emptied, never removed, so the focused pane id stays valid and focus
+       needs no repair here (a fallback branch would be unreachable). */
+    mvCommit((current) => ({ ...current, layout: kept }))
   } catch (error) {
     /* The archived set is optional; a host without it simply never clears anything. */
   }
@@ -301,9 +301,8 @@ function mvReconcile(): void {
       if (mvIsArchived(sessionId)) return null
       return sessionId
     })
-    const leaves = mvLeaves(kept)
-    const focused = leaves.some((leaf) => leaf.id === mvState.focused) ? mvState.focused : leaves[0].id
-    mvCommit((current) => ({ ...current, layout: kept, focused, reconciled: true }))
+    /* Panes are emptied, never removed, so the pane the user is on always still exists. */
+    mvCommit((current) => ({ ...current, layout: kept, reconciled: true }))
   } catch (error) {
     mvCommit((current) => ({ ...current, reconciled: true }))
   }

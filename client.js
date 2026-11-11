@@ -756,12 +756,9 @@ function mvClearArchived() {
     try {
         const kept = mvReconcileTree(mvState.layout, (sessionId)=>mvIsArchived(sessionId) ? null : sessionId);
         if (kept === mvState.layout) return;
-        const leaves = mvLeaves(kept);
-        const focused = leaves.some((leaf)=>leaf.id === mvState.focused) ? mvState.focused : leaves[0].id;
         mvCommit((current)=>({
                 ...current,
-                layout: kept,
-                focused
+                layout: kept
             }));
     } catch (error) {}
 }
@@ -776,12 +773,9 @@ function mvReconcile() {
             if (mvIsArchived(sessionId)) return null;
             return sessionId;
         });
-        const leaves = mvLeaves(kept);
-        const focused = leaves.some((leaf)=>leaf.id === mvState.focused) ? mvState.focused : leaves[0].id;
         mvCommit((current)=>({
                 ...current,
                 layout: kept,
-                focused,
                 reconciled: true
             }));
     } catch (error) {
