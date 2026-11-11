@@ -114,6 +114,31 @@
 - `index.js must export a Host apply` 原先用 `includes('export function apply')`，**`applyHost` 也能通过**——已改为带词边界的正则，本轮变异随即咬住。
 - 三条"变异打偏"：loader id 与 inject 导出是 `scripts/build.mjs` **生成**的，改源码无效；样式令牌守卫要**删光**所有令牌才会触发。打偏不是守卫的错，但如果不查就会把"打偏"误报成"守卫有效"。
 
+## 1.10 变异自检：假证据也算缺陷
+
+变异验证自己会骗人。这个项目里出现过三次"看起来做了验证、其实没有"：
+
+1. 锚点没匹配上，**什么都没改**，脚本照样打印结果；
+2. 替换**语义等价**（`query: text` → `query: query`），文本变了、行为没变；
+3. 恢复源码后**没重建**，下一次检查读的是旧 bundle。
+
+现在所有变异都经过 `.dev/vm/mutation.py`，它为每个用例做三件事：
+
+| 自检 | 做法 | 失败时报告 |
+|---|---|---|
+| 变异真的应用了 | 替换后文本必须与原文不同 | `NO-OP`（替换前后相同）或 `SKIP`（锚点不存在） |
+| 变异真的影响产物 | 重建后对比 `client.js` 的 SHA-256 | `NO-OP`（bundle 字节相同，行为不可能不同） |
+| 环境干净 | 每个用例前后重建、结束时校验源码与基线一致、再跑一次基线套件 | `sources restored: False` / `baseline suite: FAIL` |
+
+只有 `BITES`（套件真的失败）且三道自检全过，才计入证据。
+
+实测：
+
+- `npm run prove:recent`——11 个用例（代数 4、水合 3、合并规则 4）全部 `BITES`，零 `NO-OP`/`SKIP`；
+- `npm run prove:selftest`——喂给它三种**假证据**（只改注释、锚点不存在、替换前后相同），它必须全部拒绝并把汇总判为不干净。当前输出：`NO-OP` ×2、`SKIP` ×1，`runner rejected the fake evidence: True`。
+
+一句话：**这条链路上，"通过"必须是可伪造性被排除之后的结果。**
+
 ## 2.1 win11-test 真机（DSH 0.2.2-rc.1，真实 Electron 应用）
 
 安装路径：`C:\Users\Administrator\.dsh\profiles\desktop\node_modules\dsh-multiview`，profile 的 `dependencies` 与 `dsh.profile.bundles` 各加一条；装前备份 `package.json` / `cordis.patch.yml` 为 `*.bak-20261105-0951-multiview`。

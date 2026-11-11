@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.76 — 2026-11-11
+
+### 变异自检：假证据现在会被拒绝
+
+变异验证自己骗过人三次：锚点没匹配（什么都没改）、替换**语义等价**、恢复源码后**没重建**。前两次我都一度把结果当成证据。
+
+新增 `.dev/vm/mutation.py`，每个用例强制三道自检：
+
+| 自检 | 判据 | 失败标识 |
+|---|---|---|
+| 变异真的应用 | 替换后文本必须不同 | `NO-OP` / `SKIP` |
+| 变异真的影响产物 | 重建后 `client.js` 的 SHA-256 必须变 | `NO-OP`（字节相同 ⇒ 行为不可能不同） |
+| 环境干净 | 每例前后重建、结束校验源码一致、再跑基线套件 | `sources restored` / `baseline suite` |
+
+新增两条命令：
+
+- `npm run prove:recent`：代数 4 + 水合 3 + 合并规则 4 = **11 个用例全部 BITES**，零 NO-OP、零 SKIP。
+- `npm run prove:selftest`：喂给它三种**假证据**（只改注释、锚点不存在、替换前后相同），输出 `NO-OP ×2`、`SKIP ×1`、`runner rejected the fake evidence: True`。
+
+文档新增 `docs/RELEASE_ACCEPTANCE.md` §1.10。
+
+### 说明
+
+- 运行代码仅版本号变化。VM 仍停在 `Web authentication failed`（R32）。
+
+
 ## 0.1.75 — 2026-11-11
 
 ### 水合路径的属性测试，又抓到三个缺陷
