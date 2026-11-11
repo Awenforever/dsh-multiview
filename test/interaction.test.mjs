@@ -533,3 +533,56 @@ test('Escape cancels the change without touching the pane', () => {
   walk(hook.state().layout)
   assert.deepEqual(leaves.map((leaf) => leaf.sessionId), ['s1', 's2'], 'nothing was rebound')
 })
+
+test('a narrow stage shows one pane plus a switcher that carries status', () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const { stage, hook, resize } = bootHost({ sessions: list })
+  const harness = createHarness()
+  const statuses = new Map([
+    ['s1', { completionUnread: true }],
+    ['s3', { running: true }],
+  ])
+  const props = {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(statuses),
+  }
+  const render = () => harness.render(stage, props)
+
+  hook.shape(3)
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  hook.bind('p3', 's3')
+
+  /* Wide: every pane is on screen and there is no switcher. */
+  let tree = render()
+  resize({ width: 1400, height: 900 })
+  tree = render()
+  assert.equal(byClass(tree, 'mv-pane').length, 3, 'a wide stage shows all three panes')
+  const wideStrip = byClass(tree, 'mv-strip')[0]
+  assert.equal(wideStrip === undefined ? 0 : byClass(wideStrip, 'mv-chip').length, 0, 'and needs no switcher')
+
+  /* Narrow: one pane, and the other conversations survive as chips with their own status. */
+  resize({ width: 700, height: 900 })
+  tree = render()
+  assert.equal(byClass(tree, 'mv-pane').length, 1, 'a narrow stage shows one pane')
+  /* The switcher lives in the strip; its chips share a class with the shape buttons. */
+  const strip = byClass(tree, 'mv-strip')[0]
+  assert.ok(strip !== undefined, 'a narrow stage grows a switcher strip')
+  const chips = byClass(strip, 'mv-chip')
+  assert.equal(chips.length, 3, 'a chip per pane, so none of them becomes invisible')
+  const states = chips.map((chip) => chip.props['data-state'])
+  assert.deepEqual(states, ['unread', 'idle', 'running'], 'each chip reports its pane status')
+
+  /* Clicking a chip brings that conversation forward. */
+  chips[2].props.onClick(fakeEvent())
+  tree = render()
+  const headings = byClass(tree, 'mv-head-title').map(textOf)
+  assert.deepEqual(headings, ['S3'], 'the clicked conversation is the one on screen')
+
+  /* Back to wide, everything returns. */
+  resize({ width: 1400, height: 900 })
+  tree = render()
+  assert.equal(byClass(tree, 'mv-pane').length, 3, 'widening restores the whole split')
+})

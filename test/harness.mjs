@@ -209,6 +209,29 @@ export function expand(node, depth = 0, path = 'r') {
       currentKey = saved
     }
   }
+  /* A ref must resolve to something an observer can measure, otherwise every effect that touches
+     `ref.current` silently skips its work and the branch it guards is never exercised. */
+  const ref = node.props.ref
+  if (ref !== null && typeof ref === 'object' && 'current' in ref) {
+    if (ref.current === null) {
+      const element = {
+        clientWidth: 1400,
+        clientHeight: 900,
+        style: {},
+        addEventListener() {},
+        removeEventListener() {},
+        querySelector() { return null },
+        querySelectorAll() { return [] },
+        getAttribute() { return null },
+        closest() { return null },
+        contains() { return false },
+        focus() {},
+        setAttribute() {},
+      }
+      ref.current = element
+      if (Array.isArray(globalThis.document?.resizedElements)) globalThis.document.resizedElements.push(element)
+    }
+  }
   return { ...node, children: (node.children ?? []).map((child, index) => expand(child, depth, path + '.' + String(index))) }
 }
 
@@ -284,6 +307,23 @@ export function bootHost(options = {}) {
     documentElement: { style: {} },
     activeElement: null,
   }
+  /* Size is test-controlled: `host.resize({ width, height })` fires every observer. */
+  const observers = new Set()
+  class ResizeObserverStub {
+    constructor(callback) {
+      this.callback = callback
+      this.targets = []
+      observers.add(this)
+    }
+    observe(target) {
+      this.targets.push(target)
+    }
+    unobserve() {}
+    disconnect() {
+      observers.delete(this)
+    }
+  }
+
   const window = {
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -353,7 +393,21 @@ export function bootHost(options = {}) {
 
   const main = registered.find((entry) => entry.name === 'main')
   const icon = registered.find((entry) => entry.name === 'sidebar.panellist')
+  /** Pretend the stage element is this size, then fire the observers. */
+  const resize = ({ width = 1400, height = 900 } = {}) => {
+    for (const element of document.resizedElements ?? []) {
+      element.clientWidth = width
+      element.clientHeight = height
+    }
+    for (const observer of [...observers]) observer.callback([], observer)
+  }
+
+  globalThis.ResizeObserver = ResizeObserverStub
+  window.ResizeObserver = ResizeObserverStub
+  document.resizedElements = []
+
   return {
+    resize,
     stage: main === undefined ? undefined : main.component,
     icon: icon === undefined ? undefined : icon.component,
     hook: window.__mvDebug ?? globalThis.__mvDebug,
