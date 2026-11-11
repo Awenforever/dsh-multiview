@@ -46,6 +46,19 @@
 | S17 | 视图与更新（0.1.2） | 绑定 2 格后「视图」出现 1 条（名称=两格标题用 \u007c 连接）；未装市场时更新按钮提示「未检测到插件市场」，弹窗可开合 |
 | S18 | 深色主题（0.1.8） | 用户在其桌面应用切到深色主题后确认顶栏图标、按钮、弹出层对比度正常（label-primary 随主题反转） |
 
+## 1.4 发布卫生（`npm run check` 的一部分）
+
+发行包里的噪声会出现在每个用户的控制台里，所以下面几条是构建期硬性检查：
+
+| 检查 | 为什么 |
+|---|---|
+| 不得出现 `console.log` | 调试输出不该随包发布；`console.error` 只允许出现在 catch 路径且带 `dsh-multiview:` 前缀 |
+| 不得出现 `debugger`、`TODO`、`FIXME`、`XXX:` | 遗留标记不应进入发行产物 |
+| 调试钩子必须在环回主机检查之后 | `__mvDebug` 仅供冒烟测试，不能在正式环境暴露 |
+| `package.json` 的 `files` 必须包含 `client.js`、`index.js`、`cordis.patch.yml` | 少一个，安装后就不工作 |
+
+当前实测：`client.js` 内 0 个 `console.log`、9 个 `console.error`（全部在 catch 路径）、1 个 `console.warn`（默认快捷键被拒时）；无 `debugger`/`TODO`/`FIXME`。
+
 ## 1.5 随机不变量校验
 
 两条 fuzz 驱动**真实发行 bundle**（假宿主 + loopback 调试钩子），不做任何复刻：

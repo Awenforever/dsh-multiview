@@ -245,6 +245,33 @@ if (zhKeys !== null && enKeys !== null) {
   }
 }
 
+// ---- shipped-bundle hygiene -----------------------------------------------------
+{
+  /* Noise in a shipped client bundle lands in every user's console. Errors from catch paths
+     are fine and prefixed; logs and debuggers are not. */
+  ok(!/\bconsole\.log\s*\(/.test(client), 'client.js must not call console.log')
+  ok(!/\bdebugger\b/.test(client), 'client.js must not contain a debugger statement')
+  for (const marker of ['TODO', 'FIXME', 'XXX:']) {
+    ok(!client.includes(marker), `client.js must not ship a ${marker} marker`)
+  }
+
+  /* The inspection hook may exist for smoke runs, but only behind a loopback check. */
+  const hookIndex = client.indexOf('__mvDebug')
+  if (hookIndex >= 0) {
+    const window = client.slice(Math.max(0, hookIndex - 400), hookIndex)
+    ok(
+      window.includes('127.0.0.1') || window.includes('localhost'),
+      'the debug hook must stay behind a loopback host check',
+    )
+  }
+
+  /* Every file the runtime loads must be listed for publishing. */
+  const files = pkg.files ?? []
+  for (const required of ['client.js', 'index.js', 'cordis.patch.yml']) {
+    ok(files.includes(required), `package.json files must include ${required}`)
+  }
+}
+
 // ---- report -------------------------------------------------------------------
 if (failures.length > 0) {
   for (const message of failures) console.error('FAIL ' + message)

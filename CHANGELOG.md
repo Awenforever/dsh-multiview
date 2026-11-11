@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.52 — 2026-11-11
+
+### 审计与守卫：发布卫生
+
+对发行产物做了一次静态审计，结论是干净的，并把标准固化进 `npm run check`：
+
+| 检查 | 结果 |
+|---|---|
+| `console.log` | **0 个**（守卫已加，出现即构建失败） |
+| `console.error` | 9 个，全部在 catch 路径且带 `dsh-multiview:` 前缀 |
+| `console.warn` | 1 个（默认快捷键被宿主拒绝时的降级提示） |
+| `debugger` / `TODO` / `FIXME` / `XXX:` | **0 个**（守卫已加） |
+| 调试钩子 | `__mvDebug` 只在环回主机检查后安装（守卫断言这层检查仍在） |
+| `files` 字段 | 必须包含 `client.js`、`index.js`、`cordis.patch.yml`（守卫已加） |
+
+另核对 `npm pack --dry-run` 的实际打包内容：19 个文件、无 `.dev/` 泄漏、`docs/images` 与两版 README 均在包内。
+
+### 验证
+
+- 三道新守卫均做变异验证：注入 `console.log`、注入 `debugger`、从 `files` 去掉 `client.js` → 三次全部 FAIL 并给出明确原因；恢复后通过。
+- 文档：`docs/RELEASE_ACCEPTANCE.md` 新增 §1.4 说明这些检查与当前实测数字。
+
+### 说明
+
+- 运行代码未改（`client.js` 仍为 113569 字节）。
+- 未在 VM 验证：VM 仍停在 `Web authentication failed`（R32）。
+
+
 ## 0.1.51 — 2026-11-11
 
 ### 改进
