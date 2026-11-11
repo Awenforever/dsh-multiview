@@ -1,6 +1,6 @@
 {
   "name": "dsh-multiview",
-  "version": "0.1.48",
+  "version": "0.1.49",
   "description": "2-4 real Chats you rearrange entirely from the keyboard, save as named layouts, and jump through by which pane needs you.",
   "type": "module",
   "license": "MIT",
@@ -50,7 +50,9 @@
     "build": "node --disable-warning=ExperimentalWarning scripts/build.mjs",
     "check": "node scripts/check.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts",
-    "prepack": "node --disable-warning=ExperimentalWarning scripts/build.mjs && node scripts/check.mjs"
+    "prepack": "node --disable-warning=ExperimentalWarning scripts/build.mjs && node scripts/check.mjs",
+    "fuzz": "node .dev/vm/fuzz-invariants.mjs 300 40",
+    "fuzz:render": "node .dev/vm/fuzz-render.mjs 250 25"
   },
   "publishConfig": {
     "access": "public",
