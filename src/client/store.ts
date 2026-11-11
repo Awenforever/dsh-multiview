@@ -121,6 +121,10 @@ function mvViewWorthy(layout: any): boolean {
 function mvSyncView(next: any): any {
   const views = next.views ?? []
   const worthy = mvViewWorthy(next.layout)
+  if (next.captureSuppressed === true) {
+    /* One commit after deleting the current split: keep the deletion, do not re-capture. */
+    return { ...next, captureSuppressed: false }
+  }
   const current = views.find((view) => view.id === next.currentViewId) ?? null
   if (!worthy) {
     if (current === null) return next
@@ -505,10 +509,15 @@ function mvStartView(): void {
 function mvDeleteView(viewId: string): void {
   mvCommit((current) => {
     if (!current.views.some((item) => item.id === viewId)) return current
+    /* Deleting the split you are currently on must actually remove it. The layout still
+       holds two Sessions, so the next sync would treat the committed state as a brand new
+       worthy arrangement and re-capture it instantly — the entry would look undeletable.
+       Suppress exactly one capture so the deletion sticks until the user changes something. */
     return {
       ...current,
       views: current.views.filter((item) => item.id !== viewId),
       currentViewId: current.currentViewId === viewId ? null : current.currentViewId,
+      captureSuppressed: current.currentViewId === viewId,
     }
   })
 }

@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.39';
+const MV_PLUGIN_VERSION = '0.1.40';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -612,6 +612,12 @@ function mvViewWorthy(layout) {
 function mvSyncView(next) {
     const views = next.views ?? [];
     const worthy = mvViewWorthy(next.layout);
+    if (next.captureSuppressed === true) {
+        return {
+            ...next,
+            captureSuppressed: false
+        };
+    }
     const current = views.find((view)=>view.id === next.currentViewId) ?? null;
     if (!worthy) {
         if (current === null) return next;
@@ -976,7 +982,8 @@ function mvDeleteView(viewId) {
         return {
             ...current,
             views: current.views.filter((item)=>item.id !== viewId),
-            currentViewId: current.currentViewId === viewId ? null : current.currentViewId
+            currentViewId: current.currentViewId === viewId ? null : current.currentViewId,
+            captureSuppressed: current.currentViewId === viewId
         };
     });
 }
@@ -2777,6 +2784,7 @@ function apply(ctx) {
             openFor: (sessionId)=>mvOpenForSession(sessionId),
             startView: ()=>mvStartView(),
             applyView: (viewId)=>mvApplyView(viewId),
+            renameView: (viewId, name)=>mvRenameView(viewId, name),
             deleteView: (viewId)=>mvDeleteView(viewId)
         };
     }

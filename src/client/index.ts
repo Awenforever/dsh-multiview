@@ -253,6 +253,7 @@ function apply(ctx) {
       openFor: (sessionId) => mvOpenForSession(sessionId),
       startView: () => mvStartView(),
       applyView: (viewId) => mvApplyView(viewId),
+      renameView: (viewId, name) => mvRenameView(viewId, name),
       deleteView: (viewId) => mvDeleteView(viewId),
     }
   }

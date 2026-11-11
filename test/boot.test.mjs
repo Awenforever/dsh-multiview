@@ -359,3 +359,147 @@ test('the sidebar icon badges attention, and stays quiet when nothing needs you'
   assert.equal(findByClass(bare, 'mv-icon-badge').length, 0, 'missing hook must degrade to no badge')
   assert.ok(bare !== null && bare !== undefined, 'the icon must still render without the hook')
 })
+
+/**
+ * Boot the bundle in the fake host and hand back the loopback debug hook, which exposes the
+ * same pure edits the shipped UI uses.
+ * @param seed - optional persisted multiview payload.
+ * @returns the debug hook plus the host objects.
+ */
+function bootWithHook(seed) {
+  const dom = installDom(seed === undefined ? {} : { 'dsh.multiview.v1': JSON.stringify(seed) })
+  const context = createContext()
+  let loaded = null
+  const host = globalThis
+  host.__ModuleLoader__ = { load: (spec) => { loaded = spec } }
+  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  new Function('window', 'document', 'localStorage', source)(host, dom.document ?? globalThis.document, globalThis.localStorage)
+  assert.ok(loaded !== null, 'bundle did not call __ModuleLoader__.load')
+  const module = loaded.factory((name) => {
+    if (name === 'react') return React
+    throw new Error('unexpected require: ' + name)
+  })
+  module.apply(context.ctx)
+  /* The bundle is invoked with globalThis as its `window`, so the hook lands there even
+     though the DOM stub also defines a window object. Check both to stay honest. */
+  const hook = host.__mvDebug ?? host.window?.__mvDebug
+  assert.ok(hook !== undefined && hook !== null, 'the debug hook is missing on a loopback origin')
+  return { hook, context, dom }
+}
+
+test('saved split library: capture, in-place edit, rename, silence, delete', () => {
+  const { hook } = bootWithHook()
+
+  /* One bound Session is not a split, so nothing is captured yet. */
+  hook.bind('p1', 's1')
+  assert.equal(hook.state().views.length, 0, 'a single bound pane must not be saved as a split')
+
+  /* A second Session makes it a split, and it is captured automatically. */
+  hook.bind('p2', 's2')
+  let state = hook.state()
+  assert.equal(state.views.length, 1, 'binding a second Session should capture the split')
+  const saved = state.views[0]
+  assert.equal(state.currentViewId, saved.id, 'the captured split becomes the current one')
+  assert.ok(typeof saved.name === 'string' && saved.name.length > 0, 'a captured split needs a name')
+
+  /* Swapping the two panes is the same working set: it must edit that entry, not add one. */
+  hook.swap('p1', 'p2')
+  state = hook.state()
+  assert.equal(state.views.length, 1, 'swapping panes must not create a second entry')
+
+  /* A typed name survives later edits. */
+  hook.renameView(state.views[0].id, '盯盘 A 组')
+  hook.swap('p1', 'p2')
+  state = hook.state()
+  assert.equal(state.views[0].name, '盯盘 A 组', 'a typed name must survive further edits')
+
+  /* Clearing the name hands the title back to the generated one. */
+  hook.renameView(state.views[0].id, '   ')
+  state = hook.state()
+  assert.notEqual(state.views[0].name, '盯盘 A 组', 'an empty rename should restore the generated name')
+  assert.equal(state.views[0].customName, undefined, 'an empty rename clears the custom name')
+
+  /* Unbinding back to a single Session removes the split from the library. */
+  hook.remove('p2')
+  state = hook.state()
+  assert.equal(state.views.length, 0, 'a split that no longer holds two Sessions must not stay saved')
+  assert.equal(state.currentViewId, null, 'no current view once the split is no longer worthy')
+})
+
+test('saved split library: deleting and restoring', () => {
+  const { hook } = bootWithHook()
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  const viewId = hook.state().views[0].id
+
+  hook.deleteView(viewId)
+  let state = hook.state()
+  assert.equal(state.views.length, 0, 'deleting removes the entry')
+  assert.equal(state.currentViewId, null, 'deleting the current entry clears the pointer')
+
+  /* Deleting is not a permanent off switch: the next layout change captures again. Ids are
+     derived from the ordered Session list, so re-capturing the same working set legitimately
+     reuses the same id — only the entry's presence matters here. */
+  hook.shape(3)
+  state = hook.state()
+  assert.equal(state.views.length, 1, 'changing the layout after a deletion should capture the new arrangement')
+
+  /* Applying an id that is no longer in the library must be a no-op, not a resurrection. */
+  const beforeApply = state.views.length
+  hook.deleteView(state.views[0].id)
+  hook.applyView('no-such-view')
+  state = hook.state()
+  assert.equal(state.views.length, 0, 'applying an unknown view must not create entries')
+  assert.ok(beforeApply >= 1)
+})
+
+test('a profile saved by an older build is de-duplicated on load', () => {
+  const base = {
+    version: 3,
+    layout: {
+      kind: 'split',
+      id: 's1',
+      dir: 'row',
+      ratio: 0.5,
+      a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+      b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+    },
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    currentViewId: null,
+    views: [
+      {
+        id: 'ordered',
+        name: 'Alpha | Beta',
+        layout: {
+          kind: 'split',
+          id: 's1',
+          dir: 'row',
+          ratio: 0.5,
+          a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+          b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+        },
+        savedAt: 10,
+      },
+      {
+        id: 'swapped',
+        name: 'Beta | Alpha',
+        layout: {
+          kind: 'split',
+          id: 's1',
+          dir: 'row',
+          ratio: 0.5,
+          a: { kind: 'leaf', id: 'p1', sessionId: 's2' },
+          b: { kind: 'leaf', id: 'p2', sessionId: 's1' },
+        },
+        savedAt: 20,
+      },
+    ],
+  }
+
+  const { hook } = bootWithHook(base)
+  const state = hook.state()
+  assert.equal(state.views.length, 1, 'two arrangements of the same Sessions must collapse to one entry on load')
+  assert.equal(state.views[0].id, 'swapped', 'the newer entry wins when neither carries a typed name')
+})
