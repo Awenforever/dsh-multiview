@@ -52,7 +52,8 @@
     "test": "node --disable-warning=ExperimentalWarning --test test/model.test.ts test/boot.test.mjs test/interaction.test.mjs test/scenario.test.mjs",
     "prepack": "node --disable-warning=ExperimentalWarning scripts/build.mjs && node scripts/check.mjs",
     "fuzz": "node .dev/vm/fuzz-invariants.mjs 300 40",
-    "fuzz:render": "node .dev/vm/fuzz-render.mjs 250 25"
+    "fuzz:render": "node .dev/vm/fuzz-render.mjs 250 25",
+    "prove:guards": "python .dev/vm/sweep-guards.py"
   },
   "publishConfig": {
     "access": "public",

@@ -88,6 +88,35 @@
 - **更新操作会 POST**，目标是**相对路径** `/dsh-market/api/v1/updates`（同源，即宿主自己的本地服务），请求体只有 `{"packageName":"dsh-multiview"}`。它不携带第三方凭据，也无法指向外部域——绝对地址会被上面的守卫直接拒绝。
 - 之前的市场评审对这一区域的结论是 PASS，本轮在新增功能后**重新审计**而非沿用旧结论。
 
+## 1.9 守卫的自证（哪些检查被证明会失败）
+
+`npm run check` 里有 **67 处断言**。上一轮发现一个严酷的事实：**没被看到失败过的检查，不能算存在**——
+两条双语词典守卫上线时是静默通过的（切片取到空块、取到图标常量），我却在汇报里把它们算作"覆盖"。
+
+因此有了 `npm run prove:guards`：对 13 类守卫**各自制造对应的真实错误**，要求构建以**指定的信息**失败。
+
+| 用例 | 制造的错 | 结果 |
+|---|---|---|
+| package name | 改名 | BITES |
+| license | 换成 Apache-2.0 | BITES |
+| module type | 改成 commonjs | BITES |
+| prerelease engines | 收成单段范围 | BITES |
+| publish list | 从 `files` 删掉 `client.js` | BITES |
+| console noise | 注入 `console.log` | BITES |
+| dynamic code | 注入 `eval()` | BITES |
+| menu semantics | 弹层改回 `role="menu"` | BITES |
+| hex colour | 样式里写 `#ff0000` | BITES |
+| attention drift | 在 stage 里重写注意力规则 | BITES |
+| missing copy key | 删掉一个在用的中文键 | BITES |
+| docs drift | 改掉文档里的 engines 范围 | BITES |
+| checklist version | 把清单里的版本号改成 0.0.0 | BITES |
+
+**诚实标注**：这 13 类对应约 32 处断言；**其余约 35 处断言尚未做过负向对照**，它们属于"静态断言"，
+只能说明当前值符合预期，不能说"错误一定会被抓住"。下一轮继续补，直到能给出"证明/未证明"的完整清单。
+
+另一个教训写在脚本里：**恢复源码后必须重新构建**，否则下一个用例读到的是被污染的 bundle——第一次跑时
+`docs drift` 与 `checklist version` 就是因此误判的。
+
 ## 2.1 win11-test 真机（DSH 0.2.2-rc.1，真实 Electron 应用）
 
 安装路径：`C:\Users\Administrator\.dsh\profiles\desktop\node_modules\dsh-multiview`，profile 的 `dependencies` 与 `dsh.profile.bundles` 各加一条；装前备份 `package.json` / `cordis.patch.yml` 为 `*.bak-20261105-0951-multiview`。
