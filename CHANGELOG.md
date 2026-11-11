@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.1.90 — 2026-11-11
+
+### 核对：把真实对话嵌进格子的那个调用
+
+这是插件存在的根本——格子里必须是**真正的 Chat**，不是仿制品。它依赖宿主工厂槽
+`conversation.content` 的参数。若参数不对，可能静默退化成空态或错误的 phase。
+
+读宿主源码后确认，**宿主自己也这样调用**（`dsh-client-ui-subagent` 的嵌入面板）：
+
+```js
+renderFactorySlot("conversation.content", {
+  variant: "embedded",
+  phase: settling ? "settling" : hero ? "hero" : "active",
+  hero
+}, { slots: { views: FixedChatConversationView } })
+```
+
+与我们完全一致，包括三处细节：
+
+1. `phase` 的取值域是 `settling | hero | active`；
+2. `hero` 是布尔；
+3. 渲染器的签名是 `renderFactorySlot(name, props, options)`，其中 **`options.fallback` 会被原样传给
+   `<FactoryOutlet fallback={...}>`**——所以"宿主没有这个工厂"时的兜底文案是有效的，不是空转。
+
+### 验证
+
+- 新增测试（88 → 89）：渲染 pane 组件并捕获那次工厂调用，断言 name、`variant="embedded"`、
+  `phase` 在取值域内、`hero` 为布尔、`slots.views` 是函数、`fallback` 存在。
+- `docs/DESIGN.md` 契约表补上这一行。
+
+
+
 ## 0.1.89 — 2026-11-11
 
 ### 核对：快捷键注册契约（产品最核心的承诺）

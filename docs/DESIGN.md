@@ -99,6 +99,7 @@ then a pickle-framed JSON index), which is how each row below was confirmed.
 | Session status | attention rule, dots, badge | `{ running: boolean\|undefined, pendingInteraction: object\|undefined, completionUnread: boolean }` from `publishStatus` in `@deepseek-ai/dsh-client-ui-session` |
 | Session list row | titles, picker tree, ordering, seeding | `ids` + `byId[id]` with `title`, `blank`, `updatedAt`, `parentId`, `retainedBy.mainView` (`@deepseek-ai/dsh-api-session-controller`) |
 | Workspace snapshot | picker grouping, archive detection | `workspaces.list.getSnapshot()` → `{ items, pinnedSessionIds, archivedSessionIds }` (`@deepseek-ai/dsh-client-ui-workspace`) |
+| Conversation embedding | how a real Chat is drawn inside a pane | `renderFactorySlot("conversation.content", { variant: "embedded", phase, hero }, { slots: { views }, fallback })` — the same call the host's own subagent pane makes (`@deepseek-ai/dsh-client-ui-conversation`, `dsh-client-ui-subagent`); `phase` is `settling | hero | active` and the renderer forwards `options.fallback` to the outlet |
 | Shortcut registration | the six keyboard commands | `{ id, label(), aliases, regions, modals, resolve, defaults }`; defaults keyed `desktop:windows` and friends; `resolve` answers `{ status: "handled", run }` (`@deepseek-ai/dsh-client-shortcuts`) |
 | Retention count | "is this the main view" | `retainedBy.mainView` is the count the host itself tests (`(retainedBy.mainView ?? 0) > 0`) |
 

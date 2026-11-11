@@ -1361,3 +1361,45 @@ test('the shortcut registration matches the host contract', () => {
   assert.equal(answer.status, 'handled', 'an active panel handles its own keystroke')
   assert.equal(typeof answer.run, 'function', 'a handled answer carries the work to run')
 })
+
+test('embeds the shipped Conversation through the host factory', () => {
+  /* Verified against `@deepseek-ai/dsh-client-ui-conversation` and
+     `@deepseek-ai/dsh-client-ui-subagent`: both call
+     `renderFactorySlot('conversation.content', { variant, phase, hero }, { slots: { views } })`,
+     and the renderer passes `options.fallback` straight to the outlet. */
+  const { context } = bootWithHook(null)
+  const pane = context.registered.find((entry) => entry.name === 'multiview.pane')
+  assert.ok(pane !== undefined, 'the pane slot was registered')
+
+  const calls = []
+  const session = {
+    sessionId: 's1',
+    openState: 'open',
+    removed: false,
+    promptAttempted: false,
+    blank: false,
+    subagent: null,
+  }
+  const conversation = { phase: 'blank' }
+  const tree = expand(
+    pane.component({
+      sessionId: 's1',
+      useSession: (selector) => selector(session),
+      useConversation: (selector) => selector(conversation),
+      useSessions: (selector) => selector({ byId: { s1: { blank: true } } }),
+      renderFactorySlot: (name, props, options) => {
+        calls.push({ name, props, options })
+        return null
+      },
+      renderSlot: () => null,
+    }),
+  )
+  assert.equal(calls.length, 1, 'the pane renders exactly one factory')
+  const call = calls[0]
+  assert.equal(call.name, 'conversation.content', 'it embeds the shipped conversation content')
+  assert.equal(call.props.variant, 'embedded', 'embedded, which is how the host renders its own subagent pane')
+  assert.ok(['settling', 'hero', 'active'].includes(call.props.phase), 'phase is one of the host enum values')
+  assert.equal(typeof call.props.hero, 'boolean', 'hero is a boolean')
+  assert.equal(typeof call.options.slots.views, 'function', 'the chat view is pinned through the local views slot')
+  assert.ok(call.options.fallback !== undefined && call.options.fallback !== null, 'a fallback explains a host without the factory')
+})
