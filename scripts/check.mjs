@@ -169,7 +169,21 @@ const zhKeys = dictOf('MV_ZH')
 const enKeys = dictOf('MV_EN')
 ok(zhKeys !== null && enKeys !== null, 'both dictionaries must be present in client.js')
 if (zhKeys !== null && enKeys !== null) {
+  /* Every key the code asks for must exist in BOTH dictionaries. A missing key renders as the
+     raw identifier in production, and no test would notice because the fake host returns the key
+     itself — so this is checked statically. */
+  const usedKeys = new Set()
+  for (const match of client.matchAll(/\bT\('([A-Za-z][A-Za-z0-9]*)'\)/g)) usedKeys.add(match[1])
+  for (const match of client.matchAll(/labelKey:\s*'([A-Za-z][A-Za-z0-9]*)'/g)) usedKeys.add(match[1])
+  const zhList = zhKeys ?? []
+  const enList = enKeys ?? []
+  for (const key of usedKeys) {
+    ok(zhList.includes(key), `T('${key}') is not in the zh dictionary, so it would render as the raw key`)
+    ok(enList.includes(key), `T('${key}') is not in the en dictionary, so it would render as the raw key`)
+  }
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
+  notes.push(`${usedKeys.size} requested copy keys all declared`)
+
   ok(zhKeys.length >= 20, `zh dictionary looks incomplete (${zhKeys.length} keys)`)
   ok(
     JSON.stringify(zhKeys) === JSON.stringify(enKeys),
