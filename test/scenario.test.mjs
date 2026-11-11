@@ -149,3 +149,52 @@ test('the attention shortcut always moves the user, even when nothing waits', ()
   attention.resolve().run()
   assert.equal(hook.state().focused, 'p1', 'a pane that needs the user wins over walking onward')
 })
+
+test('focus never lands on a pane the user cannot see', () => {
+  /* While a pane is maximized only that pane is on screen, so moving focus elsewhere would leave the
+     focused pane invisible — and the next keystroke (close, maximize) would act on something the user
+     cannot see. Focusing a different pane therefore leaves the maximized view. */
+  const list = makeSessions(['s1', 's2'])
+  const { stage, hook, shortcuts } = bootHost({ sessions: list })
+  const harness = createHarness()
+
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  hook.maximize('p1')
+  assert.equal(hook.state().maximized, 'p1', 'the pane is maximized')
+
+  const focusNext = shortcuts.find((entry) => entry.id === 'multiview.pane.focusNext')
+  assert.ok(focusNext !== undefined, 'the focus command is registered')
+  harness.render(stage, props(list, new Map()))
+
+  focusNext.resolve().run()
+  const state = hook.state()
+  assert.notEqual(state.focused, state.maximized, 'the focused pane is the visible pane')
+  assert.equal(state.maximized, null, 'moving focus leaves the maximized view')
+  assert.equal(state.focused, 'p2', 'and lands on the neighbouring pane')
+})
+
+test('an archived conversation cannot leave its pane maximized and empty', () => {
+  /* Maximizing an empty pane is refused on the way in, but a pane could be maximized first and emptied
+     afterwards. The stage would then show a full-screen picker hiding everything else. */
+  const list = makeSessions(['s1', 's2'])
+  /* The fixture reads the archive list by reference, so it can change between renders. */
+  const archive = []
+  const { stage, hook } = bootHost({ sessions: list, archived: archive })
+  const harness = createHarness()
+
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  hook.maximize('p1')
+  assert.equal(hook.state().maximized, 'p1', 'p1 is maximized')
+
+  /* The host reports s1 as archived; the pane empties under the maximized claim. */
+  archive.push('s1')
+  hook.clearArchived()
+  harness.render(stage, props(list, new Map()))
+
+  const state = hook.state()
+  const pane = leavesOf(state.layout).find((leaf) => leaf.id === 'p1')
+  assert.equal(pane.sessionId, null, 'the archived conversation left its pane')
+  assert.equal(state.maximized, null, 'so the maximized claim is dropped too')
+})

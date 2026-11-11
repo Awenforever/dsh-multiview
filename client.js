@@ -1008,7 +1008,8 @@ function mvClearArchived() {
         if (kept === mvState.layout) return;
         mvCommit((current)=>({
                 ...current,
-                layout: kept
+                layout: kept,
+                maximized: mvValidMaximized(current.maximized, kept)
             }));
     } catch (error) {}
 }
@@ -1026,7 +1027,8 @@ function mvReconcile() {
         mvCommit((current)=>({
                 ...current,
                 layout: kept,
-                reconciled: true
+                reconciled: true,
+                maximized: mvValidMaximized(current.maximized, kept)
             }));
     } catch (error) {
         mvCommit((current)=>({
@@ -1119,11 +1121,21 @@ function mvBind(leafId, sessionId) {
         };
     });
 }
+function mvValidMaximized(maximized, layout) {
+    if (maximized === null || maximized === undefined) return null;
+    const leaf = mvLeafById(layout, maximized);
+    return leaf === null || leaf.sessionId === null ? null : maximized;
+}
 function mvFocus(leafId) {
-    mvCommit((current)=>current.focused === leafId ? current : {
+    mvCommit((current)=>{
+        const maximized = current.maximized === null || current.maximized === leafId ? current.maximized : null;
+        if (current.focused === leafId && current.maximized === maximized) return current;
+        return {
             ...current,
-            focused: leafId
-        });
+            focused: leafId,
+            maximized
+        };
+    });
 }
 function mvToggleMaximize(leafId) {
     mvCommit((current)=>{

@@ -322,8 +322,9 @@ function mvClearArchived(): void {
     const kept = mvReconcileTree(mvState.layout, (sessionId) => (mvIsArchived(sessionId) ? null : sessionId))
     if (kept === mvState.layout) return
     /* Panes are only emptied, never removed, so the focused pane id stays valid and focus
-       needs no repair here (a fallback branch would be unreachable). */
-    mvCommit((current) => ({ ...current, layout: kept }))
+       needs no repair here (a fallback branch would be unreachable). A maximized pane that just lost
+       its Session is a different matter: it has to give up the claim. */
+    mvCommit((current) => ({ ...current, layout: kept, maximized: mvValidMaximized(current.maximized, kept) }))
   } catch (error) {
     /* The archived set is optional; a host without it simply never clears anything. */
   }
@@ -345,7 +346,12 @@ function mvReconcile(): void {
       return sessionId
     })
     /* Panes are emptied, never removed, so the pane the user is on always still exists. */
-    mvCommit((current) => ({ ...current, layout: kept, reconciled: true }))
+    mvCommit((current) => ({
+      ...current,
+      layout: kept,
+      reconciled: true,
+      maximized: mvValidMaximized(current.maximized, kept),
+    }))
   } catch (error) {
     mvCommit((current) => ({ ...current, reconciled: true }))
   }
@@ -435,9 +441,33 @@ function mvBind(leafId: string, sessionId: string | null): void {
   })
 }
 
-/** Move focus to one pane. */
+/**
+ * Keep the maximized pane only while it still holds a Session.
+ *
+ * An emptied pane is fine on stage, but a maximized one would fill the whole column with the picker and
+ * hide every other conversation. `mvToggleMaximize` refuses that state on the way in; this keeps it out
+ * when a Session is archived or disappears underneath an already maximized pane.
+ */
+function mvValidMaximized(maximized: string | null, layout: any): string | null {
+  if (maximized === null || maximized === undefined) return null
+  const leaf = mvLeafById(layout, maximized)
+  return leaf === null || leaf.sessionId === null ? null : maximized
+}
+
+/**
+ * Move focus to one pane.
+ *
+ * While a pane is maximized it is the only one on screen, so focus may not move away from it without
+ * leaving the maximized view — otherwise the focused pane is invisible and the next keystroke (close,
+ * maximize, swap) acts on something the user cannot see.
+ */
 function mvFocus(leafId: string): void {
-  mvCommit((current) => (current.focused === leafId ? current : { ...current, focused: leafId }))
+  mvCommit((current) => {
+    const maximized =
+      current.maximized === null || current.maximized === leafId ? current.maximized : null
+    if (current.focused === leafId && current.maximized === maximized) return current
+    return { ...current, focused: leafId, maximized }
+  })
 }
 
 /** Toggle the maximized pane. An empty pane cannot be maximized: it would hide every other
