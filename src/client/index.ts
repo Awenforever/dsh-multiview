@@ -70,6 +70,29 @@ function mvFocusPane(leafId: string): void {
 }
 
 /**
+ * Reveal the split panel. `layout.selectPanel` is the public navigation call;
+ * the throw case is a panel that was never registered, which cannot happen while
+ * this module is loaded but must not escape a click handler.
+ */
+function mvOpenPanel(): void {
+  try {
+    PTX.layout.selectPanel(MV_PANEL_ID)
+  } catch (error) {
+    console.error('dsh-multiview: selecting the panel failed', error)
+  }
+}
+
+/**
+ * Put a Session into the split from anywhere, then hand it the keyboard.
+ * @param sessionId - Session chosen outside the split (sidebar row or menu).
+ */
+function mvOpenSessionInSplit(sessionId: string): void {
+  const leafId = mvPutInPane(sessionId)
+  mvOpenPanel()
+  if (leafId !== null) mvFocusComposer(sessionId)
+}
+
+/**
  * Install the multiview panel.
  * @param ctx - client root context.
  */
@@ -122,6 +145,33 @@ function apply(ctx) {
 
   ctx.slots.inject(MV_PANE_SLOT, () => ctx.slots.register({ name: MV_PANE_SLOT, locale: NS }, PaneConversation))
 
+  /* Sidebar Session rows: a hover action and a menu row, both public list slots
+     declared by ui-workspace (`replaceRisk: none`). */
+  ctx.slots.inject('sidebar.workspaces', function* () {
+    yield ctx.slots.inject('sidebar.workspaces.session.row.action', () =>
+      ctx.slots.register(
+        {
+          name: 'sidebar.workspaces.session.row.action',
+          id: 'multiview',
+          order: 150,
+          locale: NS,
+        },
+        MvRowSplitAction,
+      ),
+    )
+    yield ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
+      ctx.slots.register(
+        {
+          name: 'sidebar.workspaces.session.menu.item',
+          id: 'multiview',
+          order: 150,
+          locale: NS,
+        },
+        MvRowMenuAction,
+      ),
+    )
+  })
+
   mvRegisterShortcut(ctx, {
     id: 'multiview.pane.focusPrev',
     labelKey: 'shortcutFocusPrev',
@@ -133,6 +183,16 @@ function apply(ctx) {
     labelKey: 'shortcutFocusNext',
     code: 'BracketRight',
     run: () => mvFocusPane(mvNeighbour(mvGetState().layout, mvGetState().focused, 1)),
+  })
+  mvRegisterShortcut(ctx, {
+    id: 'multiview.pane.attention',
+    labelKey: 'shortcutAttention',
+    code: 'KeyJ',
+    run: () => {
+      const state = mvGetState()
+      const next = mvNextAttention(state, mvStatusSnapshot())
+      if (next !== null) mvFocusPane(next)
+    },
   })
   mvRegisterShortcut(ctx, {
     id: 'multiview.pane.maximize',

@@ -341,6 +341,45 @@ function mvRemovePane(leafId: string): void {
   })
 }
 
+/**
+ * Put one Session into the split and return the pane that now holds it.
+ *
+ * Preference order, least destructive first: the pane already holding it (just
+ * focus), an empty pane, one new pane while under the cap, and only then a
+ * replacement of the focused pane. The first three never disturb what the user
+ * already has on screen.
+ * @param sessionId - Session to place.
+ * @returns the target pane id, or null when the id is unusable.
+ */
+function mvPutInPane(sessionId: string): string | null {
+  if (typeof sessionId !== 'string' || sessionId === '') return null
+  const state = mvGetState()
+  const leaves = mvLeaves(state.layout)
+  const holder = leaves.find((leaf) => leaf.sessionId === sessionId)
+  if (holder !== undefined) {
+    mvFocus(holder.id)
+    return holder.id
+  }
+  const empty = leaves.find((leaf) => leaf.sessionId === null)
+  if (empty !== undefined) {
+    mvBind(empty.id, sessionId)
+    return empty.id
+  }
+  if (leaves.length < MV_MAX_PANES) {
+    const grown = mvShapeTo(state.layout, leaves.length + 1)
+    const fresh = mvLeaves(grown).find((leaf) => leaf.sessionId === null)
+    if (fresh !== undefined) {
+      mvSetShape(leaves.length + 1)
+      mvBind(fresh.id, sessionId)
+      return fresh.id
+    }
+  }
+  const fallback = leaves.find((leaf) => leaf.id === state.focused) ?? leaves[0]
+  if (fallback === undefined) return null
+  mvBind(fallback.id, sessionId)
+  return fallback.id
+}
+
 /** Restore a saved split by view id. */
 function mvApplyView(viewId: string): void {
   mvCommit((current) => {

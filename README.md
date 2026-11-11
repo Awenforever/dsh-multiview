@@ -30,6 +30,8 @@ A "Split" icon appears in the left panel list; click it to turn the central colu
 | Swap two panes | Drag a pane **title** onto another pane |
 | Maximize / restore | The ⤢ button in the pane header; the stage bar shows "Restore" |
 | Bind an empty pane | Search and pick a session right inside the pane |
+| Put any session into the split | Hover a **session row** in the sidebar → the split button; or the row's `…` menu → "Open in split view". Nothing leaves the split: an empty pane is filled, a new pane is added under the four-pane cap, and only a full split replaces the focused pane |
+| Jump to what needs you | The pane header's status dot is a button (a pane that is waiting for an answer or finished unread); `Mod+Alt+J` cycles to the next such pane |
 | Open in the native view | The ↗ button: hands the session back to the real conversation (the right sidebar's file preview and diff review only exist there) |
 | Remove a pane | The ✕ button; a bound pane goes **back to the session list** (the split keeps its shape), an empty pane is what ✕ actually removes |
 | Views | Bar → Views: a split with 2+ sessions is remembered automatically; click to restore, ✕ to delete |
@@ -40,8 +42,12 @@ Shortcuts (module defaults; rebind in **Settings → Shortcuts**):
 | Command | Default (desktop) |
 |---|---|
 | Focus previous / next pane | `Mod+Alt+[` / `Mod+Alt+]` |
+| Jump to the pane that needs you | `Mod+Alt+J` |
 | Maximize or restore the focused pane | `Mod+Alt+M` |
 | Remove the focused pane from the split | `Mod+Alt+W` |
+
+The divider itself is a focusable separator: `←`/`→` (or `↑`/`↓` on a stacked split) move it by 2 %,
+`Shift` takes 5 % steps, and `Home` / `Enter` / `Space` restore an even split.
 
 > The browser (Web) shell gets **no default bindings**: DSH's shortcut layer accepts a very narrow set of web/Linux combinations, and forcing one fails at boot with "reserved". Desktop defaults work; bind them manually on Web.
 

@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.28';
+const MV_PLUGIN_VERSION = '0.1.29';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -29,6 +29,9 @@ const MV_ZH = {
     remove: '清空这一格',
     divider: '调整窗格大小（方向键可调）',
     hostUnverified: 'DSH {version} 尚未验证',
+    rowActionAdd: '在分屏中打开',
+    rowActionFocus: '已在分屏中，点击聚焦',
+    rowActionMenu: '在分屏中打开',
     openMain: '在原生视图打开',
     shape: '格数',
     shapeN: '{n} 格',
@@ -71,6 +74,7 @@ const MV_ZH = {
     close: '关闭',
     shortcutFocusPrev: '聚焦上一格',
     shortcutFocusNext: '聚焦下一格',
+    shortcutAttention: '跳到下一个需要你处理的格',
     shortcutMaximize: '最大化或还原当前格',
     shortcutRemove: '从分屏移除当前格'
 };
@@ -91,6 +95,9 @@ const MV_EN = {
     remove: 'Clear this pane',
     divider: 'Resize panes (arrow keys)',
     hostUnverified: 'DSH {version} is not verified',
+    rowActionAdd: 'Open in split view',
+    rowActionFocus: 'Already in the split — click to focus',
+    rowActionMenu: 'Open in split view',
     openMain: 'Open in native view',
     shape: 'Pane count',
     shapeN: '{n} panes',
@@ -133,6 +140,7 @@ const MV_EN = {
     close: 'Close',
     shortcutFocusPrev: 'Focus previous pane',
     shortcutFocusNext: 'Focus next pane',
+    shortcutAttention: 'Jump to the pane that needs you',
     shortcutMaximize: 'Maximize or restore the current pane',
     shortcutRemove: 'Remove the current pane from the split'
 };
@@ -801,6 +809,34 @@ function mvRemovePane(leafId) {
         };
     });
 }
+function mvPutInPane(sessionId) {
+    if (typeof sessionId !== 'string' || sessionId === '') return null;
+    const state = mvGetState();
+    const leaves = mvLeaves(state.layout);
+    const holder = leaves.find((leaf)=>leaf.sessionId === sessionId);
+    if (holder !== undefined) {
+        mvFocus(holder.id);
+        return holder.id;
+    }
+    const empty = leaves.find((leaf)=>leaf.sessionId === null);
+    if (empty !== undefined) {
+        mvBind(empty.id, sessionId);
+        return empty.id;
+    }
+    if (leaves.length < MV_MAX_PANES) {
+        const grown = mvShapeTo(state.layout, leaves.length + 1);
+        const fresh = mvLeaves(grown).find((leaf)=>leaf.sessionId === null);
+        if (fresh !== undefined) {
+            mvSetShape(leaves.length + 1);
+            mvBind(fresh.id, sessionId);
+            return fresh.id;
+        }
+    }
+    const fallback = leaves.find((leaf)=>leaf.id === state.focused) ?? leaves[0];
+    if (fallback === undefined) return null;
+    mvBind(fallback.id, sessionId);
+    return fallback.id;
+}
 function mvApplyView(viewId) {
     mvCommit((current)=>{
         const view = current.views.find((item)=>item.id === viewId);
@@ -1188,6 +1224,8 @@ const MV_CSS = `
 .mv-pane[data-drag-source="true"] .mv-head{box-shadow:inset 0 0 0 1px var(--dsw-alias-state-business-primary)}
 .mv-pane[data-drop="true"]::after{content:"";position:absolute;inset:0;border:1px solid var(--dsw-alias-state-business-primary);border-radius:8px;pointer-events:none;z-index:5}
 .mv-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}
+.mv-dot-action{padding:0;border:none;cursor:pointer}
+.mv-dot-action:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .mv-dot[data-state="running"]{background:var(--dsw-alias-state-business-primary)}
 .mv-dot[data-state="waiting"]{background:var(--dsw-alias-state-warn-primary)}
 .mv-dot[data-state="unread"]{background:var(--dsw-alias-state-success-primary)}
@@ -1249,6 +1287,13 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-picker-item[data-owned="true"]:not([data-depth="0"]):hover{color:var(--dsw-alias-label-secondary)}
 .mv-dialog-button:not(.mv-dialog-button--primary):disabled:hover{background:transparent}
 .mv-bar{color:var(--dsw-alias-label-primary)}
+.mv-row-action{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.mv-row-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.mv-row-action[data-active="true"]{color:var(--dsw-alias-state-business-primary)}
+.mv-row-action:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
+.mv-menu-row{display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;text-align:left;cursor:pointer;border-radius:6px}
+.mv-menu-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-menu-row:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
 .mv-icon{color:var(--dsw-alias-label-primary)}
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
@@ -1301,7 +1346,8 @@ const MV_ICON = {
     updateInstall: 'M3 9.5v3c0 .6.45 1 1 1h8c.55 0 1-.4 1-1v-3M8 2.6v6.2M5.4 6.4 8 9l2.6-2.6',
     pause: 'M6 3.5v9M10 3.5v9',
     play: 'M6 3.6v8.8L12.6 8z',
-    views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8'
+    views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8',
+    split: 'M2.4 3.4h4.4v9.2H2.4zM9.2 3.4h4.4v9.2H9.2z'
 };
 function mvHostTitle() {
     const fallback = T('title');
@@ -1704,9 +1750,15 @@ function MvDivider(props) {
     const onKeyDown = (event)=>{
         const decrease = node.dir === 'row' ? 'ArrowLeft' : 'ArrowUp';
         const increase = node.dir === 'row' ? 'ArrowRight' : 'ArrowDown';
+        if (event.key === 'Home' || event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onResize(node.id, 0.5);
+            return;
+        }
         if (event.key !== decrease && event.key !== increase) return;
         event.preventDefault();
-        onResize(node.id, node.ratio + (event.key === increase ? 0.02 : -0.02));
+        const size = event.shiftKey ? 0.05 : 0.02;
+        onResize(node.id, node.ratio + (event.key === increase ? size : -size));
     };
     return h('div', {
         ref,
@@ -1768,11 +1820,17 @@ function PaneFrame(props) {
     }, h('div', {
         className: 'mv-head',
         'data-pane-head': ''
-    }, h('span', {
+    }, dot === 'idle' ? h('span', {
         className: 'mv-dot',
         'data-state': dot,
+        'aria-hidden': true
+    }) : h('button', {
+        type: 'button',
+        className: 'mv-dot mv-dot-action',
+        'data-state': dot,
         title: mvDotLabel(dot),
-        'aria-hidden': dot === 'idle'
+        'aria-label': mvDotLabel(dot),
+        onClick: ()=>surface.onFocus(leaf.id)
     }), h('span', {
         className: 'mv-head-title',
         title: sessionId === null ? T('empty') : title,
@@ -1803,6 +1861,28 @@ function PaneFrame(props) {
         renderSlot: surface.renderSlot,
         useSessions: surface.useSessions
     })));
+}
+let mvStatusMirror = null;
+function mvStatusSnapshot() {
+    return mvStatusMirror;
+}
+function mvAttentionLeaves(state, statuses) {
+    const out = [];
+    for (const leaf of mvLeaves(state.layout)){
+        if (leaf.sessionId === null) continue;
+        const status = statuses === undefined || statuses === null ? undefined : statuses.get(leaf.sessionId);
+        const dot = mvDotState(status);
+        if (dot === 'waiting' || dot === 'unread') out.push(leaf.id);
+    }
+    return out;
+}
+function mvNextAttention(state, statuses) {
+    const candidates = mvAttentionLeaves(state, statuses);
+    if (candidates.length === 0) return null;
+    const order = mvLeaves(state.layout).map((leaf)=>leaf.id);
+    const from = order.indexOf(state.focused);
+    const after = candidates.filter((id)=>order.indexOf(id) > from);
+    return after.length > 0 ? after[0] : candidates[0];
 }
 const MvPaneHost = React.memo(function MvPaneHost(props) {
     return h(PaneHost, {
@@ -1995,6 +2075,37 @@ function MvUpdateDialog(props) {
         onKeyDown
     }, body, actions));
 }
+function MvRowSplitAction(props) {
+    const { sessionId } = props;
+    const state = useMvState();
+    const holder = mvLeaves(state.layout).find((leaf)=>leaf.sessionId === sessionId);
+    const label = holder === undefined ? T('rowActionAdd') : T('rowActionFocus');
+    return h('button', {
+        type: 'button',
+        className: 'mv-row-action',
+        'data-active': holder === undefined ? 'false' : 'true',
+        title: label,
+        'aria-label': label,
+        onClick: ()=>mvOpenSessionInSplit(sessionId)
+    }, h(MvGlyph, {
+        path: MV_ICON.split
+    }));
+}
+function MvRowMenuAction(props) {
+    const { sessionId } = props;
+    const closeMenu = typeof props.useMenuOpenState === 'function' ? props.useMenuOpenState()[1] : null;
+    return h('button', {
+        type: 'button',
+        role: 'menuitem',
+        className: 'mv-menu-row',
+        onClick: ()=>{
+            mvOpenSessionInSplit(sessionId);
+            if (typeof closeMenu === 'function') closeMenu(false);
+        }
+    }, h(MvGlyph, {
+        path: MV_ICON.split
+    }), h('span', null, T('rowActionMenu')));
+}
 function MvViewsButton(props) {
     const { views, currentId } = props;
     const [open, setOpen] = React.useState(false);
@@ -2068,6 +2179,7 @@ function MultiviewStage(props) {
     const { renderSlot, SessionProvider, useSessions, useSessionStatus } = props;
     const list = useSessions((state)=>state);
     const statuses = useSessionStatus((state)=>state);
+    mvStatusMirror = statuses;
     const state = useMvState();
     const rootRef = React.useRef(null);
     const [narrow, setNarrow] = React.useState(false);
@@ -2357,6 +2469,18 @@ function mvFocusPane(leafId) {
     const leaf = mvLeafById(mvGetState().layout, leafId);
     if (leaf !== undefined && leaf.sessionId !== null) mvFocusComposer(leaf.sessionId);
 }
+function mvOpenPanel() {
+    try {
+        PTX.layout.selectPanel(MV_PANEL_ID);
+    } catch (error) {
+        console.error('dsh-multiview: selecting the panel failed', error);
+    }
+}
+function mvOpenSessionInSplit(sessionId) {
+    const leafId = mvPutInPane(sessionId);
+    mvOpenPanel();
+    if (leafId !== null) mvFocusComposer(sessionId);
+}
 function apply(ctx) {
     PTX = ctx;
     T = ctx.locale.bind(NS);
@@ -2399,6 +2523,20 @@ function apply(ctx) {
             name: MV_PANE_SLOT,
             locale: NS
         }, PaneConversation));
+    ctx.slots.inject('sidebar.workspaces', function*() {
+        yield ctx.slots.inject('sidebar.workspaces.session.row.action', ()=>ctx.slots.register({
+                name: 'sidebar.workspaces.session.row.action',
+                id: 'multiview',
+                order: 150,
+                locale: NS
+            }, MvRowSplitAction));
+        yield ctx.slots.inject('sidebar.workspaces.session.menu.item', ()=>ctx.slots.register({
+                name: 'sidebar.workspaces.session.menu.item',
+                id: 'multiview',
+                order: 150,
+                locale: NS
+            }, MvRowMenuAction));
+    });
     mvRegisterShortcut(ctx, {
         id: 'multiview.pane.focusPrev',
         labelKey: 'shortcutFocusPrev',
@@ -2410,6 +2548,16 @@ function apply(ctx) {
         labelKey: 'shortcutFocusNext',
         code: 'BracketRight',
         run: ()=>mvFocusPane(mvNeighbour(mvGetState().layout, mvGetState().focused, 1))
+    });
+    mvRegisterShortcut(ctx, {
+        id: 'multiview.pane.attention',
+        labelKey: 'shortcutAttention',
+        code: 'KeyJ',
+        run: ()=>{
+            const state = mvGetState();
+            const next = mvNextAttention(state, mvStatusSnapshot());
+            if (next !== null) mvFocusPane(next);
+        }
     });
     mvRegisterShortcut(ctx, {
         id: 'multiview.pane.maximize',

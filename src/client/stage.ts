@@ -277,14 +277,21 @@ function MvDivider(props) {
     window.addEventListener('pointercancel', stop)
   }
 
-  /* Arrow keys move the boundary by 2% of the window, so the layout is
-     reachable without a pointer; the separator reports its current split. */
+  /* Arrow keys move the boundary, so the layout is reachable without a pointer;
+     Shift takes 5% steps for a wide layout, and Enter/Space/Home restore an even
+     split. The separator reports its current split either way. */
   const onKeyDown = (event) => {
     const decrease = node.dir === 'row' ? 'ArrowLeft' : 'ArrowUp'
     const increase = node.dir === 'row' ? 'ArrowRight' : 'ArrowDown'
+    if (event.key === 'Home' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onResize(node.id, 0.5)
+      return
+    }
     if (event.key !== decrease && event.key !== increase) return
     event.preventDefault()
-    onResize(node.id, node.ratio + (event.key === increase ? 0.02 : -0.02))
+    const size = event.shiftKey ? 0.05 : 0.02
+    onResize(node.id, node.ratio + (event.key === increase ? size : -size))
   }
   return h('div', {
     ref,
@@ -342,7 +349,18 @@ function PaneFrame(props) {
     h(
       'div',
       { className: 'mv-head', 'data-pane-head': '' },
-      h('span', { className: 'mv-dot', 'data-state': dot, title: mvDotLabel(dot), 'aria-hidden': dot === 'idle' }),
+      dot === 'idle'
+        ? h('span', { className: 'mv-dot', 'data-state': dot, 'aria-hidden': true })
+        : /* A pane that wants the user is the one thing worth clicking in this header:
+             the dot focuses its own pane instead of asking the reader to aim at the body. */
+          h('button', {
+            type: 'button',
+            className: 'mv-dot mv-dot-action',
+            'data-state': dot,
+            title: mvDotLabel(dot),
+            'aria-label': mvDotLabel(dot),
+            onClick: () => surface.onFocus(leaf.id),
+          }),
       h(
         'span',
         {
@@ -383,6 +401,48 @@ function PaneFrame(props) {
             }),
     ),
   )
+}
+
+/* The status map is produced by a hook inside the stage; shortcuts and menu
+   actions run outside React, so the stage publishes the latest map here. */
+let mvStatusMirror: any = null
+
+/** Latest per-Session status map, or null before the stage first rendered. */
+function mvStatusSnapshot(): any {
+  return mvStatusMirror
+}
+
+/**
+ * Panes that want the user right now: one is blocked on an approval or a question,
+ * or finished with something unread. Position order keeps the cycle predictable.
+ * @param state - current multiview state.
+ * @param statuses - per-Session status map.
+ * @returns pane ids in a stable order.
+ */
+function mvAttentionLeaves(state: any, statuses: any): string[] {
+  const out: string[] = []
+  for (const leaf of mvLeaves(state.layout)) {
+    if (leaf.sessionId === null) continue
+    const status = statuses === undefined || statuses === null ? undefined : statuses.get(leaf.sessionId)
+    const dot = mvDotState(status)
+    if (dot === 'waiting' || dot === 'unread') out.push(leaf.id)
+  }
+  return out
+}
+
+/**
+ * The next pane wanting attention after the focused one, wrapping around.
+ * @param state - current multiview state.
+ * @param statuses - per-Session status map.
+ * @returns the pane to focus, or null when nothing is waiting.
+ */
+function mvNextAttention(state: any, statuses: any): string | null {
+  const candidates = mvAttentionLeaves(state, statuses)
+  if (candidates.length === 0) return null
+  const order = mvLeaves(state.layout).map((leaf) => leaf.id)
+  const from = order.indexOf(state.focused)
+  const after = candidates.filter((id) => order.indexOf(id) > from)
+  return after.length > 0 ? after[0] : candidates[0]
 }
 
 /**
@@ -621,6 +681,55 @@ function MvUpdateDialog(props) {
   )
 }
 
+/**
+ * Sidebar row action: put this Session into the split without leaving it.
+ *
+ * The host renders one icon button per Session row and owns the hover strip; this
+ * occupant only decides the glyph, the state and the action. Both this and the menu
+ * row below register into public list slots (`replaceRisk: none`).
+ */
+function MvRowSplitAction(props) {
+  const { sessionId } = props
+  const state = useMvState()
+  const holder = mvLeaves(state.layout).find((leaf) => leaf.sessionId === sessionId)
+  const label = holder === undefined ? T('rowActionAdd') : T('rowActionFocus')
+  return h(
+    'button',
+    {
+      type: 'button',
+      className: 'mv-row-action',
+      'data-active': holder === undefined ? 'false' : 'true',
+      title: label,
+      'aria-label': label,
+      onClick: () => mvOpenSessionInSplit(sessionId),
+    },
+    h(MvGlyph, { path: MV_ICON.split }),
+  )
+}
+
+/**
+ * The same action as a menu row, for touch and keyboard users: the row's hover
+ * strip is hidden on hoverless devices, so the Session menu is the second entry.
+ */
+function MvRowMenuAction(props) {
+  const { sessionId } = props
+  const closeMenu = typeof props.useMenuOpenState === 'function' ? props.useMenuOpenState()[1] : null
+  return h(
+    'button',
+    {
+      type: 'button',
+      role: 'menuitem',
+      className: 'mv-menu-row',
+      onClick: () => {
+        mvOpenSessionInSplit(sessionId)
+        if (typeof closeMenu === 'function') closeMenu(false)
+      },
+    },
+    h(MvGlyph, { path: MV_ICON.split }),
+    h('span', null, T('rowActionMenu')),
+  )
+}
+
 /** Saved splits: auto-captured whenever two or more panes are bound. */
 function MvViewsButton(props) {
   const { views, currentId } = props
@@ -713,6 +822,7 @@ function MultiviewStage(props) {
   const { renderSlot, SessionProvider, useSessions, useSessionStatus } = props
   const list = useSessions((state) => state)
   const statuses = useSessionStatus((state) => state)
+  mvStatusMirror = statuses
   const state = useMvState()
   const rootRef = React.useRef(null)
   const [narrow, setNarrow] = React.useState(false)

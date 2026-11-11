@@ -42,6 +42,8 @@ const MV_CSS = `
 .mv-pane[data-drag-source="true"] .mv-head{box-shadow:inset 0 0 0 1px var(--dsw-alias-state-business-primary)}
 .mv-pane[data-drop="true"]::after{content:"";position:absolute;inset:0;border:1px solid var(--dsw-alias-state-business-primary);border-radius:8px;pointer-events:none;z-index:5}
 .mv-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}
+.mv-dot-action{padding:0;border:none;cursor:pointer}
+.mv-dot-action:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .mv-dot[data-state="running"]{background:var(--dsw-alias-state-business-primary)}
 .mv-dot[data-state="waiting"]{background:var(--dsw-alias-state-warn-primary)}
 .mv-dot[data-state="unread"]{background:var(--dsw-alias-state-success-primary)}
@@ -103,6 +105,13 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-picker-item[data-owned="true"]:not([data-depth="0"]):hover{color:var(--dsw-alias-label-secondary)}
 .mv-dialog-button:not(.mv-dialog-button--primary):disabled:hover{background:transparent}
 .mv-bar{color:var(--dsw-alias-label-primary)}
+.mv-row-action{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:4px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.mv-row-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.mv-row-action[data-active="true"]{color:var(--dsw-alias-state-business-primary)}
+.mv-row-action:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
+.mv-menu-row{display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;text-align:left;cursor:pointer;border-radius:6px}
+.mv-menu-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-menu-row:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
 .mv-icon{color:var(--dsw-alias-label-primary)}
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
@@ -149,6 +158,7 @@ const MV_ICON = {
   pause: 'M6 3.5v9M10 3.5v9',
   play: 'M6 3.6v8.8L12.6 8z',
   views: 'M8 2.2 13.4 5 8 7.8 2.6 5 8 2.2M2.6 8.2 8 11l5.4-2.8M2.6 11.2 8 14l5.4-2.8',
+  split: 'M2.4 3.4h4.4v9.2H2.4zM9.2 3.4h4.4v9.2H9.2z',
 }
 
 /**

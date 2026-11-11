@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.28'
+const MV_PLUGIN_VERSION = '0.1.29'
 
 const MV_ZH = {
   panel: '分屏',
@@ -29,6 +29,9 @@ const MV_ZH = {
   remove: '清空这一格',
   divider: '调整窗格大小（方向键可调）',
   hostUnverified: 'DSH {version} 尚未验证',
+  rowActionAdd: '在分屏中打开',
+  rowActionFocus: '已在分屏中，点击聚焦',
+  rowActionMenu: '在分屏中打开',
   openMain: '在原生视图打开',
   shape: '格数',
   shapeN: '{n} 格',
@@ -71,6 +74,7 @@ const MV_ZH = {
   close: '关闭',
   shortcutFocusPrev: '聚焦上一格',
   shortcutFocusNext: '聚焦下一格',
+  shortcutAttention: '跳到下一个需要你处理的格',
   shortcutMaximize: '最大化或还原当前格',
   shortcutRemove: '从分屏移除当前格',
 }
@@ -92,6 +96,9 @@ const MV_EN = {
   remove: 'Clear this pane',
   divider: 'Resize panes (arrow keys)',
   hostUnverified: 'DSH {version} is not verified',
+  rowActionAdd: 'Open in split view',
+  rowActionFocus: 'Already in the split — click to focus',
+  rowActionMenu: 'Open in split view',
   openMain: 'Open in native view',
   shape: 'Pane count',
   shapeN: '{n} panes',
@@ -134,6 +141,7 @@ const MV_EN = {
   close: 'Close',
   shortcutFocusPrev: 'Focus previous pane',
   shortcutFocusNext: 'Focus next pane',
+  shortcutAttention: 'Jump to the pane that needs you',
   shortcutMaximize: 'Maximize or restore the current pane',
   shortcutRemove: 'Remove the current pane from the split',
 }
