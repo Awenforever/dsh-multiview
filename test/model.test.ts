@@ -20,6 +20,7 @@ import {
   mvAttentionPanes,
   mvKeyCap,
   mvShortcutHint,
+  mvTrimViews,
   mvNextAttentionPane,
   mvNeedsAttention,
   mvSessionSet,
@@ -326,4 +327,32 @@ test('key caps render the way the default binding reads', () => {
   assert.equal(mvKeyCap('Digit3'), '3', 'digits drop the Digit prefix')
   assert.equal(mvKeyCap('F7'), 'F7', 'an unmapped code passes through unchanged')
   assert.equal(mvShortcutHint('KeyM'), 'Mod+Alt+M', 'the default binding is primary+alt')
+})
+
+test('the saved-split library evicts an auto-named entry before a hand-named one', () => {
+  const entry = (id, customName) => ({ id, customName })
+
+  /* Under the cap nothing is touched, and the newcomer is kept. */
+  const small = mvTrimViews([entry('new'), entry('a'), entry('b')], 12)
+  assert.equal(small.views.length, 3, 'a short library keeps everything')
+  assert.equal(small.keptNewcomer, true, 'the newcomer is kept')
+
+  /* At the cap the oldest unnamed entry goes, however old the named ones are. */
+  const named12 = Array.from({ length: 12 }, (_, index) => entry('v' + index, 'named ' + index))
+  const mix = mvTrimViews([entry('new'), ...named12.slice(0, 11), entry('oldest-unnamed')], 12)
+  assert.equal(mix.views.length, 12, 'the cap holds')
+  assert.equal(mix.keptNewcomer, true, 'the newcomer is kept')
+  assert.ok(!mix.views.some((view) => view.id === 'oldest-unnamed'), 'the unnamed entry is the one dropped')
+  assert.equal(mix.views[0].id, 'new', 'the newcomer leads the list')
+
+  /* A hand-written name outranks an auto-named entry even when the named one is oldest. */
+  const namedOldest = mvTrimViews([entry('new'), entry('old-but-named', '盯盘'), ...Array.from({ length: 11 }, (_, index) => entry('auto' + index))], 12)
+  assert.ok(namedOldest.views.some((view) => view.id === 'old-but-named'), 'a named entry survives')
+  assert.equal(namedOldest.views.length, 12, 'the cap still holds')
+
+  /* Every entry named: nothing is dropped, and the newcomer is reported as not kept. */
+  const allNamed = mvTrimViews([entry('new'), ...named12], 12)
+  assert.equal(allNamed.keptNewcomer, false, 'the caller learns the newcomer did not fit')
+  assert.ok(!allNamed.views.some((view) => view.id === 'new'), 'no named entry is sacrificed')
+  assert.equal(allNamed.views.length, 12, 'the library keeps its size')
 })

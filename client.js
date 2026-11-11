@@ -580,6 +580,25 @@ function mvKeyCap(code) {
 function mvShortcutHint(code) {
     return 'Mod+Alt+' + mvKeyCap(code);
 }
+function mvTrimViews(candidates, cap) {
+    if (candidates.length <= cap) return {
+        views: candidates,
+        keptNewcomer: true
+    };
+    const named = (entry)=>typeof entry.customName === 'string' && entry.customName.trim() !== '';
+    for(let index = candidates.length - 1; index >= 1; index -= 1){
+        if (named(candidates[index])) continue;
+        const kept = candidates.filter((_, position)=>position !== index);
+        return {
+            views: kept.slice(0, cap),
+            keptNewcomer: true
+        };
+    }
+    return {
+        views: candidates.slice(1, cap + 1),
+        keptNewcomer: false
+    };
+}
 
 function mvInitialState() {
     return {
@@ -708,13 +727,14 @@ function mvSyncView(next) {
         layout: next.layout,
         savedAt: Date.now()
     };
+    const trimmed = mvTrimViews([
+        created,
+        ...views
+    ], 12);
     return {
         ...next,
-        currentViewId: created.id,
-        views: [
-            created,
-            ...views
-        ].slice(0, 12)
+        currentViewId: trimmed.keptNewcomer ? created.id : null,
+        views: trimmed.views
     };
 }
 function mvCommit(produce) {

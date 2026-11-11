@@ -188,7 +188,10 @@ function mvSyncView(next: any): any {
     }
   }
   const created = { id: key, name: mvViewName(next.layout), layout: next.layout, savedAt: Date.now() }
-  return { ...next, currentViewId: created.id, views: [created, ...views].slice(0, 12) }
+  /* At the cap, evict an auto-named entry rather than one the user named by hand; if every entry is
+     hand-named, the working split simply stays unsaved instead of costing somebody their label. */
+  const trimmed = mvTrimViews([created, ...views], 12)
+  return { ...next, currentViewId: trimmed.keptNewcomer ? created.id : null, views: trimmed.views }
 }
 
 /**

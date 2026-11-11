@@ -457,3 +457,30 @@ export function mvKeyCap(code: string): string {
 export function mvShortcutHint(code: string): string {
   return 'Mod+Alt+' + mvKeyCap(code)
 }
+
+/**
+ * Keep the saved-split library inside its cap without silently destroying a name.
+ *
+ * Candidates arrive newest-first. An entry the user named by hand outranks an auto-named one, so
+ * eviction takes the oldest unnamed entry; if every entry is named, nothing is dropped and the
+ * caller is told the newcomer did not fit.
+ * @param candidates - newest-first entries, the newcomer included at index 0.
+ * @param cap - maximum number of entries to keep.
+ * @returns kept entries and whether the newcomer survived the trim.
+ */
+export function mvTrimViews<T extends { id: string; customName?: string }>(
+  candidates: T[],
+  cap: number,
+): { views: T[]; keptNewcomer: boolean } {
+  if (candidates.length <= cap) return { views: candidates, keptNewcomer: true }
+  const named = (entry: T): boolean => typeof entry.customName === 'string' && entry.customName.trim() !== ''
+  /* Search from the oldest end so the most recent unnamed entry is the last resort. */
+  for (let index = candidates.length - 1; index >= 1; index -= 1) {
+    if (named(candidates[index])) continue
+    const kept = candidates.filter((_, position) => position !== index)
+    return { views: kept.slice(0, cap), keptNewcomer: true }
+  }
+  /* Everything is named: keep the library exactly as it was and let the newcomer stay unsaved.
+     It is index 0, so the library is the slice that skips it. */
+  return { views: candidates.slice(1, cap + 1), keptNewcomer: false }
+}
