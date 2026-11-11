@@ -258,6 +258,21 @@ if (zhKeys !== null && enKeys !== null) {
     }
   }
 
+  /* The version is declared in package.json, i18n.ts, the checklist and the CHANGELOG. The first
+     three are guarded; the CHANGELOG's newest entry is the release notes a reader sees first, so it
+     must name the version being shipped. */
+  {
+    const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8')
+    const heading = /^##\s+(\d+\.\d+\.\d+[^\s]*)/m.exec(changelog)
+    ok(heading !== null, 'the CHANGELOG must start an entry with a version heading')
+    if (heading !== null) {
+      ok(
+        heading[1] === pkg.version,
+        `CHANGELOG newest entry (${heading[1]}) must match package.json (${pkg.version})`,
+      )
+    }
+  }
+
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 
