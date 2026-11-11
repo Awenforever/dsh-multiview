@@ -106,3 +106,46 @@ function collectDots(tree) {
   const panes = byClass(tree, 'mv-pane')
   return panes.flatMap((pane) => byClass(pane, 'mv-dot'))
 }
+
+test('the attention shortcut always moves the user, even when nothing waits', () => {
+  /* Silence is indistinguishable from a broken key. With nothing asking for the user the command
+     walks to the next pane instead of spending the keystroke on nothing. It only runs while the
+     split is the active panel, so the movement is always on screen. */
+  const list = makeSessions(['s1', 's2', 's3'])
+  const { stage, hook, shortcuts } = bootHost({ sessions: list })
+  const harness = createHarness()
+
+  hook.shape(3)
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  hook.bind('p3', 's3')
+
+  const attention = shortcuts.find((entry) => entry.id === 'multiview.pane.attention')
+  assert.ok(attention !== undefined, 'the attention command is registered')
+
+  /* Everything idle: nothing wants the user. */
+  const idle = new Map([
+    ['s1', {}],
+    ['s2', {}],
+    ['s3', {}],
+  ])
+  harness.render(stage, props(list, idle))
+
+  const answer = attention.resolve()
+  assert.equal(answer.status, 'handled', 'the command owns its keystroke on the split panel')
+
+  const before = hook.state().focused
+  answer.run()
+  const after = hook.state().focused
+  assert.notEqual(after, before, 'the keystroke moves the user somewhere')
+
+  /* And with a pane waiting, it still lands there rather than merely moving on. */
+  const waiting = new Map([
+    ['s1', { pendingInteraction: {} }],
+    ['s2', {}],
+    ['s3', {}],
+  ])
+  harness.render(stage, props(list, waiting))
+  attention.resolve().run()
+  assert.equal(hook.state().focused, 'p1', 'a pane that needs the user wins over walking onward')
+})

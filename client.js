@@ -3167,7 +3167,7 @@ function apply(ctx) {
         run: ()=>{
             const state = mvGetState();
             const next = mvNextAttention(state, mvStatusSnapshot());
-            if (next !== null) mvFocusPane(next);
+            mvFocusPane(next !== null ? next : mvNeighbour(state.layout, state.focused, 1));
         }
     });
     mvRegisterShortcut(ctx, {

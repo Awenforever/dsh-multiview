@@ -191,7 +191,10 @@ function apply(ctx) {
     run: () => {
       const state = mvGetState()
       const next = mvNextAttention(state, mvStatusSnapshot())
-      if (next !== null) mvFocusPane(next)
+      /* Nothing is asking for the user. Moving on beats doing nothing: silence is
+         indistinguishable from a broken shortcut, and this command only runs while the panel is
+         the active one, so the movement is always on screen. */
+      mvFocusPane(next !== null ? next : mvNeighbour(state.layout, state.focused, 1))
     },
   })
   mvRegisterShortcut(ctx, {
