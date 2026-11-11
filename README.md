@@ -34,7 +34,7 @@ A "Split" icon appears in the left panel list; click it to turn the central colu
 | Bind an empty pane | Search and pick a session right inside the pane — by **title**, or by what was **said** in it: from two characters the pane asks the Host's message index and lists matching conversations with a snippet |
 | Put any session into the split | Hover a **session row** in the sidebar → the split button; or the row's `…` menu → "Open in split view". Nothing leaves the split: an empty pane is filled, a new pane is added under the four-pane cap, and only a full split replaces the focused pane |
 | Notice from anywhere | The sidebar Split icon carries a dot when any pane is waiting for an answer or finished unread, so you do not have to be looking at the split to know something wants you |
-| Jump to what needs you | The pane header's status dot is a button (a pane that is waiting for an answer or finished unread); `Mod+Alt+J` cycles to the next such pane |
+| Jump to what needs you | The pane header's status dot is a button (a pane that is waiting for an answer or finished unread); `Mod+Alt+J` cycles to the next such pane, and to the next pane when nothing needs you (the key never does nothing) |
 | Change a pane's conversation | The ⇄ button in the pane header re-opens the picker **inside that pane** and swaps the conversation in place. This is the only way to swap a conversation in a two-pane split, where removing a pane is impossible |
 | Open in the native view | The ↗ button: hands the session back to the real conversation (the right sidebar's file preview and diff review only exist there) |
 | Remove a pane | The ✕ button; a bound pane goes **back to the session list** (the split keeps its shape), an empty pane is what ✕ actually removes |
