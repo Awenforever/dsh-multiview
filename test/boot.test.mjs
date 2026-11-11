@@ -277,3 +277,85 @@ test('the client bundle boots, installs its slots and renders the stage', () => 
   assert.equal(countClass(rendered, 'mv-pane'), 2, 'stage did not render one frame per bound pane')
   assert.equal(countClass(rendered, 'mv-pane-body'), 2, 'pane bodies are missing')
 })
+
+/** Depth-first search for element nodes carrying one class name. */
+function findByClass(node, className, out = []) {
+  if (node == null || typeof node !== 'object') return out
+  if (Array.isArray(node)) {
+    for (const child of node) findByClass(child, className, out)
+    return out
+  }
+  const classes = node.props && typeof node.props.className === 'string' ? node.props.className.split(/\s+/) : []
+  if (classes.includes(className)) out.push(node)
+  for (const child of node.children ?? []) findByClass(child, className, out)
+  return out
+}
+
+test('the sidebar icon badges attention, and stays quiet when nothing needs you', () => {
+  const seeded = {
+    version: 3,
+    layout: {
+      kind: 'split',
+      id: 's1',
+      dir: 'row',
+      ratio: 0.5,
+      a: { kind: 'leaf', id: 'p1', sessionId: 'session-a' },
+      b: { kind: 'leaf', id: 'p2', sessionId: 'session-b' },
+    },
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    views: [],
+    currentViewId: null,
+  }
+  const dom = installDom({ 'dsh.multiview.v1': JSON.stringify(seeded) })
+  const context = createContext()
+  let loaded = null
+  const host = globalThis
+  host.__ModuleLoader__ = { load: (spec) => { loaded = spec } }
+
+  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  new Function('window', 'document', 'localStorage', source)(host, dom.document ?? globalThis.document, globalThis.localStorage)
+
+  assert.ok(loaded !== null, 'bundle did not call __ModuleLoader__.load')
+  const module = loaded.factory((name) => {
+    if (name === 'react') return React
+    throw new Error('unexpected require: ' + name)
+  })
+  module.apply(context.ctx)
+
+  const icon = context.registered.find((entry) => entry.name === 'sidebar.panellist')
+  assert.ok(icon !== undefined, 'the sidebar icon was not registered')
+  assert.equal(typeof icon.component, 'function', 'the sidebar icon must be a component')
+
+  /* One pane blocked on a question: the icon must carry a badge and announce it. */
+  const waiting = new Map([['session-a', { pendingInteraction: {} }]])
+  const busy = expand(icon.component({ size: 16, active: false, useSessionStatus: (selector) => selector(waiting) }))
+  const badges = findByClass(busy, 'mv-icon-badge')
+  assert.equal(badges.length, 1, 'a pane waiting for an answer should badge the sidebar icon')
+  const labelled = findByClass(busy, 'mv-icon-badge-host')
+  assert.equal(labelled.length, 1, 'the badge needs a host that carries the accessible label')
+  /* The fake host binds no dictionaries, so T() yields the key itself here; accept either
+     the key or the translated sentence, and assert the real copy separately below. */
+  assert.match(
+    String(labelled[0].props['aria-label']),
+    /需要你|needs you|panelAttention/,
+    'the badge must be announced, not only drawn',
+  )
+  const bundle = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  assert.ok(bundle.includes('格需要你处理') && bundle.includes('panes need you'), 'the badge copy is missing from the dictionaries')
+
+  /* Nothing waiting: no badge. */
+  const calm = expand(icon.component({ size: 16, active: false, useSessionStatus: (selector) => selector(new Map()) }))
+  assert.equal(findByClass(calm, 'mv-icon-badge').length, 0, 'no attention means no badge')
+
+  /* A pane merely running is not attention, so it must not badge either. */
+  const running = new Map([['session-a', { running: true }]])
+  const busyRunning = expand(icon.component({ size: 16, active: false, useSessionStatus: (selector) => selector(running) }))
+  assert.equal(findByClass(busyRunning, 'mv-icon-badge').length, 0, 'running is not attention')
+
+  /* A host that stops providing the hook must still render the icon. */
+  const bare = expand(icon.component({ size: 16, active: false }))
+  assert.equal(findByClass(bare, 'mv-icon-badge').length, 0, 'missing hook must degrade to no badge')
+  assert.ok(bare !== null && bare !== undefined, 'the icon must still render without the hook')
+})

@@ -12,14 +12,45 @@ function useMvState(): any {
 }
 
 /** Sidebar panel-list icon; inherits `currentColor` from the rail. */
-function MultiviewPanelIcon() {
+/**
+ * The sidebar's Split icon, carrying a badge when a pane needs the user.
+ *
+ * Watching several conversations is only useful if you find out about a blocked one while
+ * you are somewhere else. The dot states exist per pane, but they are inside the panel; the
+ * icon is the one place visible from every other view, so it mirrors attention here.
+ *
+ * Uses the slot's own `useSessionStatus` standard prop; if a future host stops providing it
+ * the icon still renders, just without the badge.
+ */
+function MultiviewPanelIcon(props: any) {
+  const state = useMvState()
+  const readStatuses = typeof props?.useSessionStatus === 'function' ? props.useSessionStatus : null
+  const statuses = readStatuses === null ? null : readStatuses((snapshot) => snapshot)
+  const count =
+    statuses === null || statuses === undefined || typeof statuses.get !== 'function'
+      ? 0
+      : mvAttentionPanes(state.layout, (sessionId) => mvDotState(statuses.get(sessionId))).length
+  const label =
+    count === 0 ? T('panel') : count === 1 ? T('panelAttentionOne') : T('panelAttention').replace('{count}', String(count))
   /* 16×16 with the shipped rows' own stroke weight, so the glyph sits on the
      same optical grid as 插件 / 自动化任务 / 更多 instead of nudging the label. */
   return h(
-    'svg',
-    { viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': true, fill: 'none' },
-    h('rect', { x: 1.75, y: 2.75, width: 12.5, height: 10.5, rx: 2.5, stroke: 'currentColor', strokeWidth: 1.4 }),
-    h('path', { d: 'M8 2.75v10.5', stroke: 'currentColor', strokeWidth: 1.2 }),
+    'span',
+    { className: 'mv-icon-badge-host', 'aria-label': label, role: count === 0 ? undefined : 'img' },
+    h(
+      'svg',
+      { viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': true, fill: 'none' },
+      h('rect', { x: 1.75, y: 2.75, width: 12.5, height: 10.5, rx: 2.5, stroke: 'currentColor', strokeWidth: 1.4 }),
+      h('path', { d: 'M8 2.75v10.5', stroke: 'currentColor', strokeWidth: 1.2 }),
+    ),
+    count === 0
+      ? null
+      : h('span', {
+          className: 'mv-icon-badge',
+          'data-attention': 'true',
+          'data-count': String(count),
+          'aria-hidden': true,
+        }),
   )
 }
 

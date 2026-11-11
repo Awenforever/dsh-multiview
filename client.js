@@ -11,9 +11,11 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.37';
+const MV_PLUGIN_VERSION = '0.1.38';
 const MV_ZH = {
     panel: '分屏',
+    panelAttention: '{count} 格需要你处理',
+    panelAttentionOne: '有 1 格需要你处理',
     title: '分屏',
     empty: '选择一个会话',
     pick: '选择会话',
@@ -82,6 +84,8 @@ const MV_ZH = {
 };
 const MV_EN = {
     panel: 'Split',
+    panelAttention: '{count} panes need you',
+    panelAttentionOne: '1 pane needs you',
     title: 'Split',
     empty: 'Pick a session',
     pick: 'Pick a session',
@@ -1390,6 +1394,8 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-menu-row{display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;text-align:left;cursor:pointer;border-radius:6px}
 .mv-menu-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .mv-menu-row:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
+.mv-icon-badge-host{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.mv-icon-badge{position:absolute;top:-1px;right:-1px;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-warn-primary);box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill)}
 .mv-icon{color:var(--dsw-alias-label-primary)}
 .mv-icon:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-chip{color:var(--dsw-alias-label-secondary)}
@@ -1602,8 +1608,17 @@ function PaneHost(props) {
 function useMvState() {
     return React.useSyncExternalStore(mvSubscribe, mvGetState, mvGetState);
 }
-function MultiviewPanelIcon() {
-    return h('svg', {
+function MultiviewPanelIcon(props) {
+    const state = useMvState();
+    const readStatuses = typeof props?.useSessionStatus === 'function' ? props.useSessionStatus : null;
+    const statuses = readStatuses === null ? null : readStatuses((snapshot)=>snapshot);
+    const count = statuses === null || statuses === undefined || typeof statuses.get !== 'function' ? 0 : mvAttentionPanes(state.layout, (sessionId)=>mvDotState(statuses.get(sessionId))).length;
+    const label = count === 0 ? T('panel') : count === 1 ? T('panelAttentionOne') : T('panelAttention').replace('{count}', String(count));
+    return h('span', {
+        className: 'mv-icon-badge-host',
+        'aria-label': label,
+        role: count === 0 ? undefined : 'img'
+    }, h('svg', {
         viewBox: '0 0 16 16',
         width: 16,
         height: 16,
@@ -1621,6 +1636,11 @@ function MultiviewPanelIcon() {
         d: 'M8 2.75v10.5',
         stroke: 'currentColor',
         strokeWidth: 1.2
+    })), count === 0 ? null : h('span', {
+        className: 'mv-icon-badge',
+        'data-attention': 'true',
+        'data-count': String(count),
+        'aria-hidden': true
     }));
 }
 function mvDotState(status) {
