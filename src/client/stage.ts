@@ -36,12 +36,15 @@ function MultiviewPanelIcon(props: any) {
   const iconTitle = count === 0 ? label : label + ' · ' + mvShortcutHint('KeyJ')
   /* 16×16 with the shipped rows' own stroke weight, so the glyph sits on the
      same optical grid as 插件 / 自动化任务 / 更多 instead of nudging the label. */
+  /* Owner props include `size`: the requested square edge. A fixed 16px glyph would sit a pixel or
+     two off the shipped panel icons when the host asks for something else. */
+  const edge = typeof props?.size === 'number' && props.size > 0 && props.size <= 48 ? props.size : 16
   return h(
     'span',
     { className: 'mv-icon-badge-host', 'aria-label': label, title: iconTitle, role: count === 0 ? undefined : 'img' },
     h(
       'svg',
-      { viewBox: '0 0 16 16', width: 16, height: 16, 'aria-hidden': true, fill: 'none' },
+      { viewBox: '0 0 16 16', width: edge, height: edge, 'aria-hidden': true, fill: 'none' },
       h('rect', { x: 1.75, y: 2.75, width: 12.5, height: 10.5, rx: 2.5, stroke: 'currentColor', strokeWidth: 1.4 }),
       h('path', { d: 'M8 2.75v10.5', stroke: 'currentColor', strokeWidth: 1.2 }),
     ),

@@ -200,6 +200,17 @@ if (zhKeys !== null && enKeys !== null) {
     }
   }
 
+  /* Sidebar row actions sit in the host's own action strip, whose button is
+     `._action_1mqf1_43`: 24x24 with `--dsw-radius-sm`. A smaller button reads as a different
+     control beside its neighbours. */
+  const rowAction = /\.mv-row-action\{([^}]*)\}/.exec(client)
+  ok(rowAction !== null, 'the sidebar row action must have a style rule')
+  if (rowAction !== null) {
+    for (const declaration of ['width:24px', 'height:24px', 'border-radius:var(--dsw-radius-sm)']) {
+      ok(rowAction[1].includes(declaration), `.mv-row-action must declare ${declaration} to match the host action button`)
+    }
+  }
+
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 

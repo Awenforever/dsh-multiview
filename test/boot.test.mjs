@@ -1300,3 +1300,28 @@ test('a workspaces snapshot without an archive list still seeds panes', () => {
   assert.ok(Array.isArray(picked), 'seeding returns a list')
   assert.ok(picked.length > 0, 'and still finds conversations')
 })
+
+test('the panel icon follows the requested size', () => {
+  const { context } = bootWithHook(null)
+  const icon = context.registered.find((entry) => entry.name === 'sidebar.panellist')
+  assert.ok(icon !== undefined, 'the sidebar icon was registered')
+
+  const sizeOf = (tree) => {
+    const found = []
+    const walk = (node) => {
+      if (node === null || node === undefined || typeof node !== 'object') return
+      if (Array.isArray(node)) { node.forEach(walk); return }
+      if (node.type === 'svg') found.push(node.props)
+      for (const child of node.children ?? []) walk(child)
+    }
+    walk(tree)
+    return found[0]
+  }
+
+  /* The slot's owner props carry the requested square edge; the glyph must use it. */
+  const asked = expand(icon.component({ size: 20, active: false, useSessionStatus: (selector) => selector(new Map()) }))
+  assert.equal(sizeOf(asked).width, 20, 'a 20px request draws a 20px glyph')
+
+  const fallback = expand(icon.component({ active: false, useSessionStatus: (selector) => selector(new Map()) }))
+  assert.equal(sizeOf(fallback).width, 16, 'without a request the glyph stays 16px')
+})
