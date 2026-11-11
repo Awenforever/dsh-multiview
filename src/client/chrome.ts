@@ -138,10 +138,17 @@ function MvGlyph(props) {
 
 /** Icon button with an accessible name and a native tooltip. */
 function MvIconButton(props) {
-  const { label, path, onClick } = props
+  const { label, path, onClick, hint } = props
+  /* The hint goes in the tooltip only: a screen reader should hear the action, not the chord. */
   return h(
     'button',
-    { type: 'button', className: 'mv-icon', title: label, 'aria-label': label, onClick },
+    {
+      type: 'button',
+      className: 'mv-icon',
+      title: hint === undefined || hint === null || hint === '' ? label : label + ' · ' + hint,
+      'aria-label': label,
+      onClick,
+    },
     h(MvGlyph, { path }),
   )
 }

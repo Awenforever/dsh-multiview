@@ -435,3 +435,25 @@ export function mvReconcileTree(node: any, reconcile: (sessionId: string) => str
     return { ...leaf, sessionId: kept }
   })
 }
+
+/**
+ * Key cap for a physical key code, as the default binding renders it.
+ *
+ * The defaults are `primary+alt`, so a hint only needs the key itself. Unmapped codes fall through
+ * unchanged rather than guessing, which keeps a wrong hint from appearing silently.
+ * @param code - physical key code such as `KeyJ` or `BracketLeft`.
+ */
+export function mvKeyCap(code: string): string {
+  if (code === 'BracketLeft') return '['
+  if (code === 'BracketRight') return ']'
+  if (code === 'Slash') return '/'
+  if (code === 'Backslash') return '\\'
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  return code
+}
+
+/** Tooltip hint for a command's default binding, e.g. `Mod+Alt+J`. */
+export function mvShortcutHint(code: string): string {
+  return 'Mod+Alt+' + mvKeyCap(code)
+}

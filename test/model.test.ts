@@ -18,6 +18,8 @@ import {
   mvArrangementKey,
   mvDedupeViews,
   mvAttentionPanes,
+  mvKeyCap,
+  mvShortcutHint,
   mvNextAttentionPane,
   mvNeedsAttention,
   mvSessionSet,
@@ -315,4 +317,13 @@ test('shrinking keeps the conversation you are watching, growing leaves every se
 
   /* Without a focus hint the old positional rule still applies, so callers stay simple. */
   assert.deepEqual(mvLeaves(mvShapeTo(tree, 2)).map((leaf) => leaf.sessionId), ['a', 'b'])
+})
+
+test('key caps render the way the default binding reads', () => {
+  assert.equal(mvKeyCap('KeyJ'), 'J', 'letter keys drop the Key prefix')
+  assert.equal(mvKeyCap('BracketLeft'), '[', 'brackets have their own cap')
+  assert.equal(mvKeyCap('BracketRight'), ']', 'brackets have their own cap')
+  assert.equal(mvKeyCap('Digit3'), '3', 'digits drop the Digit prefix')
+  assert.equal(mvKeyCap('F7'), 'F7', 'an unmapped code passes through unchanged')
+  assert.equal(mvShortcutHint('KeyM'), 'Mod+Alt+M', 'the default binding is primary+alt')
 })

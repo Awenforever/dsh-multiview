@@ -198,3 +198,26 @@ test('the picker says when a conversation is already on this split', () => {
   assert.equal(textOf(onStageRow), 'S1pickOnStage', 'the row is labelled as already on this split')
   assert.equal(textOf(freeRow), 'S2', 'a free conversation carries no such label')
 })
+
+test('the tooltip names the shortcut while the accessible name stays the action', () => {
+  const list = makeSessions(['s1', 's2'])
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  hook.bind('p1', 's1')
+  hook.bind('p2', 's2')
+  const tree = harness.render(stage, {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  })
+
+  const maximize = byLabel(tree, 'maximize')[0]
+  assert.ok(maximize !== undefined, 'the maximize control exists')
+  assert.equal(maximize.props.title, 'maximize · Mod+Alt+M', 'the tooltip teaches the chord')
+  assert.equal(maximize.props['aria-label'], 'maximize', 'a screen reader hears the action only')
+
+  const remove = byLabel(tree, 'remove')[0]
+  assert.ok(remove !== undefined, 'the clear control exists')
+  assert.equal(remove.props.title, 'remove · Mod+Alt+W', 'the tooltip teaches the chord')
+})

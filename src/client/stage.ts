@@ -433,6 +433,7 @@ function PaneFrame(props) {
           ? null
           : h(MvIconButton, {
               label: maximized ? T('restore') : T('maximize'),
+              hint: mvShortcutHint('KeyM'),
               path: maximized ? MV_ICON.restore : MV_ICON.maximize,
               onClick: () => surface.onMaximize(leaf.id),
             }),
@@ -444,7 +445,12 @@ function PaneFrame(props) {
               onClick: () => surface.onOpenMain(sessionId),
             }),
         removable
-          ? h(MvIconButton, { label: T('remove'), path: MV_ICON.close, onClick: () => surface.onRemove(leaf.id) })
+          ? h(MvIconButton, {
+              label: T('remove'),
+              hint: mvShortcutHint('KeyW'),
+              path: MV_ICON.close,
+              onClick: () => surface.onRemove(leaf.id),
+            })
           : null,
       ),
     ),

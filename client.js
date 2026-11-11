@@ -566,6 +566,18 @@ function mvReconcileTree(node, reconcile) {
         };
     });
 }
+function mvKeyCap(code) {
+    if (code === 'BracketLeft') return '[';
+    if (code === 'BracketRight') return ']';
+    if (code === 'Slash') return '/';
+    if (code === 'Backslash') return '\\';
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+    if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+    return code;
+}
+function mvShortcutHint(code) {
+    return 'Mod+Alt+' + mvKeyCap(code);
+}
 
 function mvInitialState() {
     return {
@@ -1513,11 +1525,11 @@ function MvGlyph(props) {
     }));
 }
 function MvIconButton(props) {
-    const { label, path, onClick } = props;
+    const { label, path, onClick, hint } = props;
     return h('button', {
         type: 'button',
         className: 'mv-icon',
-        title: label,
+        title: hint === undefined || hint === null || hint === '' ? label : label + ' · ' + hint,
         'aria-label': label,
         onClick
     }, h(MvGlyph, {
@@ -2047,6 +2059,7 @@ function PaneFrame(props) {
         className: 'mv-head-actions'
     }, sessionId === null ? null : h(MvIconButton, {
         label: maximized ? T('restore') : T('maximize'),
+        hint: mvShortcutHint('KeyM'),
         path: maximized ? MV_ICON.restore : MV_ICON.maximize,
         onClick: ()=>surface.onMaximize(leaf.id)
     }), sessionId === null ? null : h(MvIconButton, {
@@ -2055,6 +2068,7 @@ function PaneFrame(props) {
         onClick: ()=>surface.onOpenMain(sessionId)
     }), removable ? h(MvIconButton, {
         label: T('remove'),
+        hint: mvShortcutHint('KeyW'),
         path: MV_ICON.close,
         onClick: ()=>surface.onRemove(leaf.id)
     }) : null)), h('div', {
