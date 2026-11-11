@@ -575,11 +575,13 @@ test('a narrow stage shows one pane plus a switcher that carries status', () => 
   const states = chips.map((chip) => chip.props['data-state'])
   assert.deepEqual(states, ['unread', 'idle', 'running'], 'each chip reports its pane status')
 
-  /* Clicking a chip brings that conversation forward. */
-  chips[2].props.onClick(fakeEvent())
+  /* Focus already sits on the last bound pane, so click a *different* chip: the assertion only
+     proves anything if the visible pane has to change. */
+  assert.equal(textOf(byClass(tree, 'mv-head-title')[0]), 'S3', 'the focused pane is the one shown')
+  chips[0].props.onClick(fakeEvent())
   tree = render()
   const headings = byClass(tree, 'mv-head-title').map(textOf)
-  assert.deepEqual(headings, ['S3'], 'the clicked conversation is the one on screen')
+  assert.deepEqual(headings, ['S1'], 'the clicked conversation is the one on screen')
 
   /* Back to wide, everything returns. */
   resize({ width: 1400, height: 900 })
