@@ -8,6 +8,7 @@
 
 /** Hard cap: the product opens at most four live conversations. */
 const MV_MAX_PANES = 4
+const MV_MIN_PANES = 2
 /** Smallest share either side of a split may keep. */
 const MV_MIN_RATIO = 0.22
 const MV_MAX_RATIO = 0.78
@@ -313,9 +314,19 @@ export function mvResize(node: any, splitId: string, ratio: number): any {
  */
 export function mvRemoveLeaf(node: any, leafId: string): any {
   if (node === null || node === undefined) return null
+  /* The two-pane minimum is a product invariant, so the algebra refuses to express a smaller tree
+     instead of trusting every caller to check first. It is checked once, at the root: the recursive
+     step must still be able to collapse a two-pane subtree, which is how any removal works. */
+  if (mvLeafCount(node) <= MV_MIN_PANES) return node
+  return mvRemoveLeafIn(node, leafId)
+}
+
+/** Recursive step of {@link mvRemoveLeaf}: collapses the parent of the removed pane. */
+function mvRemoveLeafIn(node: any, leafId: string): any {
+  if (node === null || node === undefined) return null
   if (node.kind === 'leaf') return node.id === leafId ? null : node
-  const a = mvRemoveLeaf(node.a, leafId)
-  const b = mvRemoveLeaf(node.b, leafId)
+  const a = mvRemoveLeafIn(node.a, leafId)
+  const b = mvRemoveLeafIn(node.b, leafId)
   if (a === null) return b
   if (b === null) return a
   if (a === node.a && b === node.b) return node
@@ -362,28 +373,73 @@ export function mvIsSplit(value: any): boolean {
   return value.a !== null && value.b !== null && typeof value.a === 'object' && typeof value.b === 'object'
 }
 
+/**
+ * Take `proposed` when it is a usable identity that has not appeared yet; otherwise mint one and
+ * **record it**. Not recording the minted id is what let two duplicates end up with the same fresh
+ * identity, which silently merged two panes into one for every id-keyed operation.
+ * @param proposed - identity from the payload.
+ * @param prefix - `p` for panes, `s` for splits.
+ * @param seen - every identity already assigned in this tree.
+ */
+function mvUniqueId(proposed: any, prefix: string, seen: Set<string>): string {
+  if (typeof proposed === 'string' && proposed !== '' && !seen.has(proposed)) {
+    seen.add(proposed)
+    return proposed
+  }
+  let counter = seen.size + 1
+  let candidate = prefix + String(counter)
+  while (seen.has(candidate)) {
+    counter += 1
+    candidate = prefix + String(counter)
+  }
+  seen.add(candidate)
+  return candidate
+}
+
 /** Assign fresh identities to any node missing or duplicating one. */
 export function mvNormalizeIds(node: any, seen: Set<string>): any {
   if (node === null || node === undefined) return node
   if (node.kind === 'leaf') {
-    if (seen.has(node.id)) return { ...node, id: 'p' + String(seen.size + 1) }
-    seen.add(node.id)
-    return node
+    const id = mvUniqueId(node.id, 'p', seen)
+    return id === node.id ? node : { ...node, id }
   }
   const a = mvNormalizeIds(node.a, seen)
   const b = mvNormalizeIds(node.b, seen)
-  const id = seen.has(node.id) ? 's' + String(seen.size + 1) : node.id
-  seen.add(id)
+  const id = mvUniqueId(node.id, 's', seen)
   if (a === node.a && b === node.b && id === node.id) return node
   return { ...node, id, a, b }
 }
+
+/**
+ * Repair a persisted layout, then enforce the invariant every edit relies on: one conversation per
+ * pane. Persisted data is the one input nobody validates, and a hand-edited payload could otherwise
+ * put the same conversation in two panes, where the rest of the algebra assumes it cannot happen.
+ * @param raw - untrusted persisted layout.
+ */
+export function mvSanitize(raw: any): any {
+  const repaired = mvSanitizeRaw(raw)
+  const seen = new Set<string>()
+  const clearDuplicates = (value: any): any => {
+    if (value === null || value === undefined) return value
+    if (value.kind === 'leaf') {
+      if (value.sessionId === null) return value
+      if (seen.has(value.sessionId)) return { ...value, sessionId: null }
+      seen.add(value.sessionId)
+      return value
+    }
+    if (value.kind !== 'split') return value
+    return { ...value, a: clearDuplicates(value.a), b: clearDuplicates(value.b) }
+  }
+  return clearDuplicates(repaired)
+}
+
 
 /**
  * Validate and repair an untrusted layout (persisted JSON or a probe input).
  * @param raw - candidate value.
  * @returns a usable tree, or null when nothing usable was supplied.
  */
-export function mvSanitize(raw: any): any {
+function mvSanitizeRaw(raw: any): any {
   /* Overflow is not "keep the left subtree": for a left-deep chain that subtree is a single
      leaf, so a five-pane saved layout used to collapse to one pane. Instead remember that the
      tree was too big and rebuild a standard shape holding the first panes, in reading order. */

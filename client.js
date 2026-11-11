@@ -279,6 +279,7 @@ function mvTopUp(current, limit) {
 }
 
 const MV_MAX_PANES = 4;
+const MV_MIN_PANES = 2;
 const MV_MIN_RATIO = 0.22;
 const MV_MAX_RATIO = 0.78;
 function mvClampRatio(value) {
@@ -467,9 +468,14 @@ function mvResize(node, splitId, ratio) {
 }
 function mvRemoveLeaf(node, leafId) {
     if (node === null || node === undefined) return null;
+    if (mvLeafCount(node) <= MV_MIN_PANES) return node;
+    return mvRemoveLeafIn(node, leafId);
+}
+function mvRemoveLeafIn(node, leafId) {
+    if (node === null || node === undefined) return null;
     if (node.kind === 'leaf') return node.id === leafId ? null : node;
-    const a = mvRemoveLeaf(node.a, leafId);
-    const b = mvRemoveLeaf(node.b, leafId);
+    const a = mvRemoveLeafIn(node.a, leafId);
+    const b = mvRemoveLeafIn(node.b, leafId);
     if (a === null) return b;
     if (b === null) return a;
     if (a === node.a && b === node.b) return node;
@@ -499,20 +505,32 @@ function mvIsSplit(value) {
     if (typeof value.ratio !== 'number' || !Number.isFinite(value.ratio)) return false;
     return value.a !== null && value.b !== null && typeof value.a === 'object' && typeof value.b === 'object';
 }
+function mvUniqueId(proposed, prefix, seen) {
+    if (typeof proposed === 'string' && proposed !== '' && !seen.has(proposed)) {
+        seen.add(proposed);
+        return proposed;
+    }
+    let counter = seen.size + 1;
+    let candidate = prefix + String(counter);
+    while(seen.has(candidate)){
+        counter += 1;
+        candidate = prefix + String(counter);
+    }
+    seen.add(candidate);
+    return candidate;
+}
 function mvNormalizeIds(node, seen) {
     if (node === null || node === undefined) return node;
     if (node.kind === 'leaf') {
-        if (seen.has(node.id)) return {
+        const id = mvUniqueId(node.id, 'p', seen);
+        return id === node.id ? node : {
             ...node,
-            id: 'p' + String(seen.size + 1)
+            id
         };
-        seen.add(node.id);
-        return node;
     }
     const a = mvNormalizeIds(node.a, seen);
     const b = mvNormalizeIds(node.b, seen);
-    const id = seen.has(node.id) ? 's' + String(seen.size + 1) : node.id;
-    seen.add(id);
+    const id = mvUniqueId(node.id, 's', seen);
     if (a === node.a && b === node.b && id === node.id) return node;
     return {
         ...node,
@@ -522,6 +540,29 @@ function mvNormalizeIds(node, seen) {
     };
 }
 function mvSanitize(raw) {
+    const repaired = mvSanitizeRaw(raw);
+    const seen = new Set();
+    const clearDuplicates = (value)=>{
+        if (value === null || value === undefined) return value;
+        if (value.kind === 'leaf') {
+            if (value.sessionId === null) return value;
+            if (seen.has(value.sessionId)) return {
+                ...value,
+                sessionId: null
+            };
+            seen.add(value.sessionId);
+            return value;
+        }
+        if (value.kind !== 'split') return value;
+        return {
+            ...value,
+            a: clearDuplicates(value.a),
+            b: clearDuplicates(value.b)
+        };
+    };
+    return clearDuplicates(repaired);
+}
+function mvSanitizeRaw(raw) {
     let overflowed = false;
     const walk = (value, depth)=>{
         if (depth > 8) return null;

@@ -112,7 +112,11 @@ test('removing a pane promotes its sibling', () => {
   assert.deepEqual(mvLeaves(three).map((leaf) => leaf.id), ['p1', 'p2', 'p4'])
   const two = mvRemoveLeaf(three, 'p4')
   assert.equal(mvLeafCount(two), 2)
-  assert.equal(mvRemoveLeaf(mvRemoveLeaf(two, 'p1'), 'p2'), null)
+  /* At the minimum the algebra refuses instead of returning a one-pane tree: the floor is a product
+     invariant, so it lives here rather than only in the caller. */
+  assert.deepEqual(mvRemoveLeaf(two, 'p1'), two)
+  assert.deepEqual(mvRemoveLeaf(two, 'p2'), two)
+  assert.equal(mvLeafCount(mvRemoveLeaf(two, 'p1')), 2)
 })
 
 test('sanitize accepts a good tree and repairs ratios', () => {
