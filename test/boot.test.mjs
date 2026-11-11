@@ -1282,3 +1282,21 @@ test('the stage bar shows which saved split is on stage', () => {
   /* A stale currentViewId (entry gone) must not render an empty label. */
   assert.deepEqual(barNames(renderWith('gone', views)), [], 'a dangling currentViewId renders nothing')
 })
+
+test('a workspaces snapshot without an archive list still seeds panes', () => {
+  /* The host builds `archivedSessionIds` with the snapshot; before the first frame it may be
+     absent. Seeding must then treat every Session as not-archived instead of throwing. */
+  const layout = {
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+    b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+  }
+  const { hook } = bootWithHook(
+    { version: 3, layout, focused: 'p1', preset: 2, seeded: false, views: [], currentViewId: null },
+    null,
+    { omitArchived: true },
+  )
+  const picked = hook.seed(2)
+  assert.ok(Array.isArray(picked), 'seeding returns a list')
+  assert.ok(picked.length > 0, 'and still finds conversations')
+})

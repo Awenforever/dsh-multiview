@@ -79,8 +79,11 @@ function mvTitle(sessionId: string): string | undefined {
 /** Whether a Session identity is archived in any workspace. */
 function mvIsArchived(sessionId: string): boolean {
   try {
+    /* Verified against the host: `workspaces.list.getSnapshot()` carries
+       `{ items, pinnedSessionIds, archivedSessionIds }`. The array may be absent before the first
+       snapshot arrives, and asking "is it archived" then must be false rather than a throw. */
     const archived = (PTX as any).workspaces.list.getSnapshot().archivedSessionIds
-    return archived.includes(sessionId)
+    return Array.isArray(archived) ? archived.includes(sessionId) : false
   } catch (error) {
     return false
   }

@@ -381,8 +381,13 @@ export function bootHost(options = {}) {
       search: options.search ?? (() => Promise.resolve({ ok: true, value: { items: [], hasMore: false } })),
     },
     workspaces: {
-      list: { getSnapshot: () => ({ groups: [], workspaceId: 'default', archivedSessionIds: archived }) },
-      useList: (selector) => selector({ groups: [], workspaceId: 'default' }),
+      list: {
+        getSnapshot: () =>
+          options.omitArchived === true
+            ? { items: [], pinnedSessionIds: [] }
+            : { groups: [], workspaceId: 'default', items: [], archivedSessionIds: archived },
+      },
+      useList: (selector) => selector({ groups: [], workspaceId: 'default', items: [] }),
     },
     layout: {
       panelInfo: { getSnapshot: () => ({ activePanelId: 'multiview' }) },

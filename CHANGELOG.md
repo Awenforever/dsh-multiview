@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.83 — 2026-11-11
+
+### 核对：把剩下的宿主契约也验了
+
+继续用 asar 读取宿主源码，逐条核对插件依赖的接口：
+
+| 契约 | 结论 |
+|---|---|
+| 会话列表行 `title` / `blank` / `updatedAt` / `parentId` / `retainedBy.mainView` | **全部存在**，与用法一致 |
+| `workspaces.list.getSnapshot()` = `{ items, pinnedSessionIds, archivedSessionIds }` | **一致**，归档检测的假设正确 |
+| `retainedBy.mainView` 是"是否主视图"的计数 | **一致**，宿主自己也用 `(retainedBy.mainView ?? 0) > 0` |
+
+**好消息是这几条假设都对**——但它们此前只是假设，现在有据可查。
+
+### 一处稳健性收紧
+
+`archivedSessionIds` 是随快照一起到达的，**第一帧之前可能不存在**。原实现直接 `.includes(...)`，
+靠 catch 兜底；现在显式用 `Array.isArray(...)`，"未知"就当作"未归档"。新增断言：快照里没有归档列表时，
+初始填充仍能正常工作。
+
+### 文档
+
+`docs/DESIGN.md` 新增「Contracts verified against host source」表，记录每条契约的来源文件与形状，
+以及两条推论（归档字段可能缺省；`parentId`/`updatedAt` 若被改名，选择器会静默变平而不是报错）。
+
+
+
 ## 0.1.82 — 2026-11-11
 
 ### 核对：注意力规则用的状态契约，终于不是我的猜测

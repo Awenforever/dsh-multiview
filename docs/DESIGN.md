@@ -87,6 +87,27 @@ type Split = { kind:'split'; id: string; dir:'row'|'col'; ratio: number; a: Node
 1. 任一全局面板激活时右栏会话面会被卸下（`ui-sidebar-right` 的 on-screen session effect），所以格内无法直达文件预览/diff —— 用 ↗ 回原生视图，而不是 monkey-patch。
 2. Hero 的工作区选择器属于应用级导航（`uiWorkspace.openSession` → `selectPanel(null)`），所以格内不做新建会话。
 
+
+## Contracts verified against host source
+
+Every host API this plugin reads was an assumption until it was checked against the shipped code.
+The host ships as an Electron `asar` archive; its JavaScript can be read directly (8-byte header,
+then a pickle-framed JSON index), which is how each row below was confirmed.
+
+| Contract | Where it is used | Verified shape |
+|---|---|---|
+| Session status | attention rule, dots, badge | `{ running: boolean\|undefined, pendingInteraction: object\|undefined, completionUnread: boolean }` from `publishStatus` in `@deepseek-ai/dsh-client-ui-session` |
+| Session list row | titles, picker tree, ordering, seeding | `ids` + `byId[id]` with `title`, `blank`, `updatedAt`, `parentId`, `retainedBy.mainView` (`@deepseek-ai/dsh-api-session-controller`) |
+| Workspace snapshot | picker grouping, archive detection | `workspaces.list.getSnapshot()` → `{ items, pinnedSessionIds, archivedSessionIds }` (`@deepseek-ai/dsh-client-ui-workspace`) |
+| Retention count | "is this the main view" | `retainedBy.mainView` is the count the host itself tests (`(retainedBy.mainView ?? 0) > 0`) |
+
+Two consequences worth keeping:
+
+- `archivedSessionIds` arrives **with** the snapshot; before the first snapshot it may be absent, so
+  the archive test is `Array.isArray(...) && includes(...)`, and "unknown" means "not archived".
+- The picker's parent/child nesting and recency ordering depend on `parentId` and `updatedAt`; if the
+  host ever renamed either, the picker would silently flatten instead of failing.
+
 ## Session status contract (verified against host source)
 
 The attention rule reads `useSessionStatus`, whose entries the host builds in

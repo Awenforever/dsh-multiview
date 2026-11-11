@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.82';
+const MV_PLUGIN_VERSION = '0.1.83';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -225,7 +225,7 @@ function mvTitle(sessionId) {
 function mvIsArchived(sessionId) {
     try {
         const archived = PTX.workspaces.list.getSnapshot().archivedSessionIds;
-        return archived.includes(sessionId);
+        return Array.isArray(archived) ? archived.includes(sessionId) : false;
     } catch (error) {
         return false;
     }
