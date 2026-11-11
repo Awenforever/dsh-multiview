@@ -224,6 +224,19 @@ if (zhKeys !== null && enKeys !== null) {
     )
   }
 
+  /* Floating surfaces copy the host's own shapes: the menu surface is `--dsw-radius-lg`, the dialog
+     is `--dsw-radius-panel`, and both carry the half-pixel elevation ring rather than a 1px border. */
+  const surface = (selector) => {
+    const match = new RegExp('\\.' + selector + '\\{([^}]*)\\}').exec(client)
+    return match === null ? null : match[1]
+  }
+  const popover = surface('mv-views-pop')
+  const dialog = surface('mv-dialog')
+  ok(popover !== null && popover.includes('border-radius:var(--dsw-radius-lg)'), '.mv-views-pop must use --dsw-radius-lg like the host menu surface')
+  ok(popover !== null && popover.includes('box-shadow:0 0 0 .5px'), '.mv-views-pop must carry the host\'s half-pixel elevation ring')
+  ok(dialog !== null && dialog.includes('border-radius:var(--dsw-radius-panel)'), '.mv-dialog must use --dsw-radius-panel like the host dialog')
+  ok(dialog !== null && dialog.includes('box-shadow:0 0 0 .5px'), '.mv-dialog must carry the elevation ring')
+
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 
