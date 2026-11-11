@@ -741,6 +741,29 @@ function mvViewKey(layout) {
 function mvViewSet(layout) {
     return mvArrangementKey(layout);
 }
+function mvEnsureViewIds(views) {
+    const seen = new Set();
+    let minted = 0;
+    return views.map((view)=>{
+        if (!seen.has(view.id)) {
+            seen.add(view.id);
+            return view;
+        }
+        minted += 1;
+        const base = view.id + '-' + String(minted);
+        let candidate = base;
+        let counter = minted;
+        while(seen.has(candidate)){
+            counter += 1;
+            candidate = view.id + '-' + String(counter);
+        }
+        seen.add(candidate);
+        return {
+            ...view,
+            id: candidate
+        };
+    });
+}
 function mvNormalizeViews(views) {
     return mvDedupeViews(views);
 }
@@ -847,9 +870,12 @@ function mvSanitizeView(raw) {
     if (raw === null || typeof raw !== 'object') return null;
     const layout = mvSanitize(raw.layout);
     if (layout === null || !mvViewWorthy(layout)) return null;
+    const customName = typeof raw.customName === 'string' && raw.customName.trim() !== '' ? raw.customName.trim() : undefined;
+    const name = customName ?? (typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'));
     return {
         id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : mvViewKey(layout),
-        name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'),
+        name,
+        customName,
         layout,
         savedAt: typeof raw.savedAt === 'number' ? raw.savedAt : Date.now()
     };
@@ -867,13 +893,13 @@ function mvHydrate() {
     if (layout === null) return;
     const leaves = mvLeaves(layout);
     const focused = leaves.some((leaf)=>leaf.id === raw.focused) ? raw.focused : leaves[0].id;
-    const views = mvNormalizeViews(Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view)=>view !== null) : []);
+    const views = mvEnsureViewIds(mvNormalizeViews(Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view)=>view !== null) : []));
     const currentViewId = typeof raw.currentViewId === 'string' && views.some((view)=>view.id === raw.currentViewId) ? raw.currentViewId : null;
     mvState = {
         layout,
         focused,
         maximized: null,
-        preset: typeof raw.preset === 'number' ? raw.preset : leaves.length,
+        preset: typeof raw.preset === 'number' && raw.preset >= 2 && raw.preset <= 4 && raw.preset === leaves.length ? raw.preset : leaves.length,
         seeded: raw.seeded === true,
         reconciled: false,
         views,

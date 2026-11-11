@@ -294,7 +294,9 @@ export function bootHost(options = {}) {
     setItem: (key, value) => { store[key] = String(value) },
     removeItem: (key) => { delete store[key] },
   }
+  /* `rawSeed` writes the exact string, which is how a corrupt or hand-edited document is simulated. */
   if (options.seed !== undefined) store['dsh.multiview.v1'] = JSON.stringify(options.seed)
+  if (options.rawSeed !== undefined) store['dsh.multiview.v1'] = String(options.rawSeed)
 
   const document = {
     head: { appendChild: () => {}, removeChild: () => {} },

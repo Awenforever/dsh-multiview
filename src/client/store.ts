@@ -86,6 +86,34 @@ function mvViewSet(layout: any): string {
  * @param views - saved splits in stored order.
  * @returns the de-duplicated list, order preserved by first appearance.
  */
+/**
+ * Give every persisted view a unique identity.
+ *
+ * A hand-edited or partially-merged document can carry two entries with the same id; rename and
+ * delete address an entry by id, so duplicates would edit or remove two splits at once.
+ * @param views - sanitized entries, possibly sharing ids.
+ */
+function mvEnsureViewIds(views: any[]): any[] {
+  const seen = new Set<string>()
+  let minted = 0
+  return views.map((view) => {
+    if (!seen.has(view.id)) {
+      seen.add(view.id)
+      return view
+    }
+    minted += 1
+    const base = view.id + '-' + String(minted)
+    let candidate = base
+    let counter = minted
+    while (seen.has(candidate)) {
+      counter += 1
+      candidate = view.id + '-' + String(counter)
+    }
+    seen.add(candidate)
+    return { ...view, id: candidate }
+  })
+}
+
 function mvNormalizeViews(views: any[]): any[] {
   return mvDedupeViews(views)
 }
@@ -217,9 +245,16 @@ function mvSanitizeView(raw: any): any {
   if (raw === null || typeof raw !== 'object') return null
   const layout = mvSanitize(raw.layout)
   if (layout === null || !mvViewWorthy(layout)) return null
+  /* `customName` is what distinguishes a name the user typed from a generated one, and the eviction
+     rule depends on that distinction. Dropping it here silently demoted every hand-named split to an
+     auto-named one on the next reload, which let the library evict a name it promised to keep. */
+  const customName = typeof raw.customName === 'string' && raw.customName.trim() !== '' ? raw.customName.trim() : undefined
+  const name =
+    customName ?? (typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'))
   return {
     id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : mvViewKey(layout),
-    name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : T('viewsCurrent'),
+    name,
+    customName,
     layout,
     savedAt: typeof raw.savedAt === 'number' ? raw.savedAt : Date.now(),
   }
@@ -239,8 +274,8 @@ function mvHydrate(): void {
   if (layout === null) return
   const leaves = mvLeaves(layout)
   const focused = leaves.some((leaf) => leaf.id === raw.focused) ? raw.focused : leaves[0].id
-  const views = mvNormalizeViews(
-    Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view) => view !== null) : [],
+  const views = mvEnsureViewIds(
+    mvNormalizeViews(Array.isArray(raw.views) ? raw.views.map(mvSanitizeView).filter((view) => view !== null) : []),
   )
   const currentViewId =
     typeof raw.currentViewId === 'string' && views.some((view) => view.id === raw.currentViewId)
@@ -250,7 +285,12 @@ function mvHydrate(): void {
     layout,
     focused,
     maximized: null,
-    preset: typeof raw.preset === 'number' ? raw.preset : leaves.length,
+    /* The layout is the truth: a preset outside 2..4 (or one that disagrees with the repaired
+       tree) would leave the state describing a shape it is not in. */
+    preset:
+      typeof raw.preset === 'number' && raw.preset >= 2 && raw.preset <= 4 && raw.preset === leaves.length
+        ? raw.preset
+        : leaves.length,
     seeded: raw.seeded === true,
     reconciled: false,
     views,
