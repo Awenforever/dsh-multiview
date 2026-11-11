@@ -21,6 +21,7 @@ const MV_ZH = {
     pick: '选择会话',
     pickSearch: '搜索会话',
     pickEmpty: '没有匹配的会话',
+    pickOnStage: '已在分屏中',
     pickNone: '还没有会话，先在左侧新建一个',
     loading: '正在打开会话…',
     openFailed: '打开会话失败：{message}',
@@ -92,6 +93,7 @@ const MV_EN = {
     pick: 'Pick a session',
     pickSearch: 'Search sessions',
     pickEmpty: 'No matching session',
+    pickOnStage: 'On this split',
     pickNone: 'No conversations yet — create one in the sidebar first',
     loading: 'Opening session…',
     openFailed: 'Could not open this session: {message}',
@@ -1740,7 +1742,7 @@ function mvDotLabel(state) {
     if (state === 'unread') return T('unread');
     return '';
 }
-function mvPickableRows(query, views = [], currentViewId = null) {
+function mvPickableRows(query, views = [], currentViewId = null, onStage = []) {
     const need = query.trim().toLowerCase();
     try {
         const list = PTX.sessions.list.getSnapshot();
@@ -1817,12 +1819,15 @@ function mvPickableRows(query, views = [], currentViewId = null) {
                 const title = shown > 0 ? '↳ ' + raw : raw;
                 const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need);
                 const owner = mvViewOwner(id, views, currentViewId);
-                if (matched) out.push({
-                    id,
-                    title,
-                    depth: shown,
-                    owner: owner === null ? null : owner.name
-                });
+                if (matched) {
+                    out.push({
+                        id,
+                        title,
+                        depth: shown,
+                        owner: owner === null ? null : owner.name,
+                        onStage: onStage.includes(id)
+                    });
+                }
                 for (const childId of children.get(id) ?? [])append(childId, Math.min(shown + 1, 3));
             };
             for (const id of roots)append(id, 0);
@@ -1840,9 +1845,9 @@ function mvPickableRows(query, views = [], currentViewId = null) {
     }
 }
 function MvPanePicker(props) {
-    const { onPick, views, currentViewId } = props;
+    const { onPick, views, currentViewId, onStage } = props;
     const [query, setQuery] = React.useState('');
-    const rows = mvPickableRows(query, views ?? [], currentViewId ?? null);
+    const rows = mvPickableRows(query, views ?? [], currentViewId ?? null, onStage ?? []);
     return h('div', {
         className: 'mv-picker',
         'data-mv-picker': ''
@@ -1876,11 +1881,13 @@ function MvPanePicker(props) {
             style: row.depth === 0 ? undefined : {
                 paddingLeft: String(8 + row.depth * 14) + 'px'
             },
-            title: row.owner === null || row.owner === undefined ? row.title : row.title + ' · ' + T('views') + ': ' + row.owner,
+            title: row.owner === null || row.owner === undefined ? row.onStage === true ? row.title + ' · ' + T('pickOnStage') : row.title : row.title + ' · ' + T('views') + ': ' + row.owner,
             onClick: ()=>onPick(row.id)
         }, h('span', {
             className: 'mv-picker-title'
-        }, row.title), row.owner === null || row.owner === undefined ? null : h('span', {
+        }, row.title), row.owner === null || row.owner === undefined ? row.onStage === true ? h('span', {
+            className: 'mv-picker-owner'
+        }, T('pickOnStage')) : null : h('span', {
             className: 'mv-picker-owner'
         }, row.owner)))));
 }
@@ -2055,7 +2062,8 @@ function PaneFrame(props) {
     }, sessionId === null ? h(MvPanePicker, {
         onPick: (id)=>surface.onBind(leaf.id, id),
         views: surface.state.views,
-        currentViewId: surface.state.currentViewId
+        currentViewId: surface.state.currentViewId,
+        onStage: mvLeaves(surface.state.layout).map((item)=>item.sessionId).filter((id)=>id !== null)
     }) : h(MvPaneHost, {
         sessionId,
         SessionProvider: surface.SessionProvider,

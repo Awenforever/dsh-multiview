@@ -74,7 +74,12 @@ function mvDotLabel(state: string): string {
  * @param query - free text matched against title and id.
  * @returns rows with a `depth` for the picker's indent.
  */
-function mvPickableRows(query: string, views: any[] = [], currentViewId: string | null = null): any[] {
+function mvPickableRows(
+  query: string,
+  views: any[] = [],
+  currentViewId: string | null = null,
+  onStage: string[] = [],
+): any[] {
   const need = query.trim().toLowerCase()
   try {
     const list = PTX.sessions.list.getSnapshot()
@@ -144,7 +149,16 @@ function mvPickableRows(query: string, views: any[] = [], currentViewId: string 
         const title = shown > 0 ? '↳ ' + raw : raw
         const matched = need === '' || raw.toLowerCase().includes(need) || id.toLowerCase().includes(need)
         const owner = mvViewOwner(id, views, currentViewId)
-      if (matched) out.push({ id, title, depth: shown, owner: owner === null ? null : owner.name })
+      if (matched) {
+        out.push({
+          id,
+          title,
+          depth: shown,
+          owner: owner === null ? null : owner.name,
+          /* Already on this split: picking it moves it rather than adding it. */
+          onStage: onStage.includes(id),
+        })
+      }
         for (const childId of children.get(id) ?? []) append(childId, Math.min(shown + 1, 3))
       }
       for (const id of roots) append(id, 0)
@@ -160,9 +174,9 @@ function mvPickableRows(query: string, views: any[] = [], currentViewId: string 
 
 /** Empty-pane session picker: filter field plus the most recent sessions. */
 function MvPanePicker(props) {
-  const { onPick, views, currentViewId } = props
+  const { onPick, views, currentViewId, onStage } = props
   const [query, setQuery] = React.useState('')
-  const rows = mvPickableRows(query, views ?? [], currentViewId ?? null)
+  const rows = mvPickableRows(query, views ?? [], currentViewId ?? null, onStage ?? [])
   return h(
     'div',
     { className: 'mv-picker', 'data-mv-picker': '' },
@@ -206,13 +220,17 @@ function MvPanePicker(props) {
                     style: row.depth === 0 ? undefined : { paddingLeft: String(8 + row.depth * 14) + 'px' },
                     title:
                       row.owner === null || row.owner === undefined
-                        ? row.title
+                        ? row.onStage === true
+                          ? row.title + ' · ' + T('pickOnStage')
+                          : row.title
                         : row.title + ' · ' + T('views') + ': ' + row.owner,
                     onClick: () => onPick(row.id),
                   },
                   h('span', { className: 'mv-picker-title' }, row.title),
                   row.owner === null || row.owner === undefined
-                    ? null
+                    ? row.onStage === true
+                      ? h('span', { className: 'mv-picker-owner' }, T('pickOnStage'))
+                      : null
                     : h('span', { className: 'mv-picker-owner' }, row.owner),
                 ),
           ),
@@ -434,7 +452,15 @@ function PaneFrame(props) {
       'div',
       { className: 'mv-pane-body' },
       sessionId === null
-        ? h(MvPanePicker, { onPick: (id) => surface.onBind(leaf.id, id), views: surface.state.views, currentViewId: surface.state.currentViewId })
+        ? h(MvPanePicker, {
+          onPick: (id) => surface.onBind(leaf.id, id),
+          views: surface.state.views,
+          currentViewId: surface.state.currentViewId,
+          /* Which conversations are already on this split, so the picker can say so. */
+          onStage: mvLeaves(surface.state.layout)
+            .map((item) => item.sessionId)
+            .filter((id) => id !== null),
+        })
         : h(MvPaneHost, {
               sessionId,
               SessionProvider: surface.SessionProvider,

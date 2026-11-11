@@ -1,268 +1,29 @@
 /**
- * Interaction tests: popovers that only exist after a click.
+ * Interaction tests: surfaces that only exist after a click.
  *
- * The render fuzz boots the bundle with a fake host whose hooks do nothing, so anything behind
- * `useState(false)` (the Views popover, the update dialog, the rename input) never appeared in a
- * test. This file adds a small stateful hook runtime: components get real state, a setter marks the
- * tree dirty, and the harness re-renders until it settles — so a click can be performed and the
- * result asserted.
+ * The render fuzz boots the bundle with hooks that do nothing, so anything behind `useState(false)`
+ * (the Views popover, the update dialog, the rename input, the picker's search) never appeared in a
+ * test. The shared harness supplies stateful hooks, so a click can be performed and the result
+ * asserted here.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import {
+  bootHost,
+  createHarness,
+  byClass,
+  byLabel,
+  textOf,
+  fakeEvent,
+  collect,
+  makeSessions,
+} from './harness.mjs'
 
-/* ---------- element tree ---------- */
-function createElement(type, props, ...children) {
-  return { type, props: props ?? {}, children: children.flat(Infinity).filter((child) => child != null) }
-}
-
-/* ---------- mutable React surface ----------
-   The bundle captures this object once, so swapping its hook methods between passes is how the
-   harness supplies live state without touching shipped code. */
-const React = {
-  createElement,
-  Fragment: Symbol('Fragment'),
-  memo: (component) => component,
-  Component: class {
-    constructor(props) {
-      this.props = props
-      this.state = {}
-    }
-    setState(next) {
-      this.state = { ...this.state, ...next }
-    }
-    render() {
-      return null
-    }
-  },
-  useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
-  useReducer: (reducer, initial) => [initial, () => {}],
-  useEffect: () => {},
-  useLayoutEffect: () => {},
-  useMemo: (factory) => factory(),
-  useCallback: (callback) => callback,
-  useRef: (initial) => ({ current: initial }),
-  useContext: () => ({}),
-  useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
-  createContext: (value) => ({ Provider: null, _value: value }),
-}
-
-/* ---------- stateful hook runtime ---------- */
-function createHarness() {
-  const slots = { state: [], refs: [] }
-  let cursor = 0
-  let dirty = false
-  let effects = []
-
-  const hooks = {
-    useState(initial) {
-      const index = cursor++
-      if (slots.state[index] === undefined) {
-        slots.state[index] = typeof initial === 'function' ? initial() : initial
-      }
-      const set = (next) => {
-        const value = typeof next === 'function' ? next(slots.state[index]) : next
-        if (value === slots.state[index]) return
-        slots.state[index] = value
-        dirty = true
-      }
-      return [slots.state[index], set]
-    },
-    useReducer(_reducer, initial) {
-      const index = cursor++
-      if (slots.state[index] === undefined) slots.state[index] = initial
-      const dispatch = (next) => {
-        slots.state[index] = typeof next === 'function' ? next(slots.state[index]) : next
-        dirty = true
-      }
-      return [slots.state[index], dispatch]
-    },
-    useRef(initial) {
-      const index = cursor++
-      if (slots.refs[index] === undefined) slots.refs[index] = { current: initial }
-      return slots.refs[index]
-    },
-    useEffect(effect) {
-      effects.push(effect)
-    },
-    useLayoutEffect(effect) {
-      effects.push(effect)
-    },
-    useMemo(factory) {
-      return factory()
-    },
-    useCallback(callback) {
-      return callback
-    },
-    useContext() {
-      return {}
-    },
-    useSyncExternalStore(_subscribe, getSnapshot) {
-      return getSnapshot()
-    },
-    createContext(value) {
-      return { Provider: null, _value: value }
-    },
-  }
-
-  function renderOnce(component, props) {
-    cursor = 0
-    dirty = false
-    effects = []
-    const saved = {}
-    for (const key of Object.keys(hooks)) {
-      saved[key] = React[key]
-      React[key] = hooks[key]
-    }
-    try {
-      return expand(component(props))
-    } finally {
-      for (const key of Object.keys(saved)) React[key] = saved[key]
-    }
-  }
-
-  /** Render until the tree stops changing, running effects after each pass. */
-  function render(component, props, maxPasses = 20) {
-    let tree = renderOnce(component, props)
-    for (let pass = 0; pass < maxPasses && dirty; pass += 1) {
-      const pending = effects
-      for (const effect of pending) {
-        const cleanup = effect()
-        if (typeof cleanup === 'function') cleanup()
-      }
-      tree = renderOnce(component, props)
-    }
-    return tree
-  }
-
-  return { render }
-}
-
-/* ---------- tree helpers ---------- */
-function expand(node, depth = 0) {
-  if (node == null || depth > 60) return node
-  if (Array.isArray(node)) return node.map((child) => expand(child, depth))
-  if (typeof node !== 'object') return node
-  if (typeof node.type === 'function') {
-    const children = node.children.length <= 1 ? node.children[0] : node.children
-    const isClass = node.type.prototype && node.type.prototype.render !== undefined
-    if (isClass) {
-      const instance = new node.type({ ...node.props, children })
-      return expand(instance.render(), depth + 1)
-    }
-    return expand(node.type({ ...node.props, children }), depth + 1)
-  }
-  return { ...node, children: (node.children ?? []).map((child) => expand(child, depth)) }
-}
-
-function collect(node, predicate, out = []) {
-  if (node == null || typeof node !== 'object') return out
-  if (Array.isArray(node)) {
-    node.forEach((child) => collect(child, predicate, out))
-    return out
-  }
-  if (predicate(node)) out.push(node)
-  for (const child of node.children ?? []) collect(child, predicate, out)
-  return out
-}
-
-const byClass = (tree, className) =>
-  collect(tree, (node) => {
-    const value = node.props && node.props.className
-    return typeof value === 'string' && value.split(/\s+/).includes(className)
-  })
-const byLabel = (tree, label) => collect(tree, (node) => node.props && node.props['aria-label'] === label)
-/** Minimal event object: handlers in the bundle call these two methods. */
-const fakeEvent = () => ({ stopPropagation: () => {}, preventDefault: () => {} })
-
-const textOf = (node) => {
-  let text = ''
-  const walk = (value) => {
-    if (value == null) return
-    if (typeof value === 'string' || typeof value === 'number') { text += String(value); return }
-    if (Array.isArray(value)) { value.forEach(walk); return }
-    if (typeof value === 'object') walk(value.children ?? [])
-  }
-  walk(node)
-  return text.trim()
-}
-
-/* ---------- fake host ---------- */
 const SESSION_IDS = ['s1', 's2']
-const LIST = {
-  phase: 'ready',
-  ids: SESSION_IDS,
-  byId: Object.fromEntries(SESSION_IDS.map((id) => [id, { id, title: id.toUpperCase(), blank: false }])),
-}
+const LIST = makeSessions(SESSION_IDS)
 
-function bootHost() {
-  const store = {}
-  const localStorage = {
-    getItem: (key) => (key in store ? store[key] : null),
-    setItem: (key, value) => { store[key] = String(value) },
-    removeItem: (key) => { delete store[key] },
-  }
-  const document = {
-    head: { appendChild: () => {}, removeChild: () => {} },
-    createElement: () => ({ dataset: {}, style: {}, appendChild: () => {}, remove: () => {}, setAttribute: () => {} }),
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    body: { hasAttribute: () => false, setAttribute: () => {}, removeAttribute: () => {}, style: {} },
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    documentElement: { style: {} },
-  }
-  const window = {
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
-    requestAnimationFrame: (callback) => setTimeout(callback, 0),
-    cancelAnimationFrame: (handle) => clearTimeout(handle),
-    innerWidth: 1440,
-    innerHeight: 900,
-    devicePixelRatio: 1,
-    location: { hostname: 'localhost', protocol: 'http:', search: '', href: 'http://localhost/' },
-    navigator: { userAgent: 'node', platform: 'linux' },
-  }
-  Object.assign(globalThis, { window, document, localStorage, location: window.location })
-
-  const registered = []
-  registered.shortcuts = []
-  const context = {
-    effect: (body) => { if (typeof body === 'function') body(); return () => {} },
-    locale: { register: () => {}, bind: () => (key) => key },
-    slots: {
-      register: (declaration, component) => { registered.push({ name: declaration.name, key: declaration.key, component }); return { dispose: () => {} } },
-      inject: (name, body) => {
-        const isGenerator = typeof body === 'function' && body.constructor && body.constructor.name === 'GeneratorFunction'
-        return isGenerator ? [...body()] : body()
-      },
-    },
-    sessions: { list: { getSnapshot: () => LIST }, retain: () => ({ ready: Promise.resolve(), release: () => {} }), useList: (selector) => selector(LIST) },
-    workspaces: { list: { getSnapshot: () => ({ groups: [], workspaceId: 'default' }) }, useList: (selector) => selector({ groups: [], workspaceId: 'default' }) },
-    layout: { panelInfo: { getSnapshot: () => ({ activePanelId: 'multiview' }) }, usePanelInfo: (selector) => selector({ activePanelId: 'multiview' }) },
-    uiWorkspace: { openSession: () => {} },
-    shortcuts: { register: (entry) => { registered.shortcuts.push(entry); return () => {} } },
-  }
-
-  let loaded = null
-  globalThis.__ModuleLoader__ = { load: (spec) => { loaded = spec } }
-  const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-  new Function('window', 'document', 'localStorage', source)(globalThis, document, localStorage)
-  const module = loaded.factory((name) => {
-    if (name === 'react') return React
-    throw new Error('unexpected require: ' + name)
-  })
-  module.apply(context)
-
-  const main = registered.find((entry) => entry.name === 'main')
-  assert.ok(main !== undefined, 'main panel was not registered')
-  return { stage: main.component, hook: globalThis.__mvDebug }
-}
-
-/* ---------- tests ---------- */
 test('the Views popover opens, applies a saved split, and closes again', () => {
-  const { stage, hook } = bootHost()
+  const { stage, hook } = bootHost({ sessions: LIST })
   const harness = createHarness()
   const props = {
     renderSlot: () => null,
@@ -299,7 +60,7 @@ test('the Views popover opens, applies a saved split, and closes again', () => {
 })
 
 test('renaming a saved split through the popover writes a custom name', () => {
-  const { stage, hook } = bootHost()
+  const { stage, hook } = bootHost({ sessions: LIST })
   const harness = createHarness()
   const props = {
     renderSlot: () => null,
@@ -335,7 +96,7 @@ test('renaming a saved split through the popover writes a custom name', () => {
 })
 
 test('the empty-pane picker filters as you type and binds on click', () => {
-  const { stage, hook } = bootHost()
+  const { stage, hook } = bootHost({ sessions: LIST })
   const harness = createHarness()
   const props = {
     renderSlot: () => null,
@@ -388,7 +149,7 @@ test('the empty-pane picker filters as you type and binds on click', () => {
 })
 
 test('the update dialog opens as a modal', () => {
-  const { stage } = bootHost()
+  const { stage } = bootHost({ sessions: LIST })
   const harness = createHarness()
   const props = {
     renderSlot: () => null,
@@ -407,4 +168,33 @@ test('the update dialog opens as a modal', () => {
   const dialogs = collect(tree, (node) => node.props && node.props.role === 'dialog')
   assert.equal(dialogs.length, 1, 'one click opens a single dialog')
   assert.equal(dialogs[0].props['aria-modal'], 'true', 'the dialog declares itself modal')
+})
+
+test('the picker says when a conversation is already on this split', () => {
+  const list = makeSessions(['s1', 's2'])
+  const { stage, hook } = bootHost({ sessions: list })
+  const harness = createHarness()
+  const render = () =>
+    harness.render(stage, {
+      renderSlot: () => null,
+      SessionProvider: ({ children }) => children,
+      useSessions: (selector) => selector(list),
+      useSessionStatus: (selector) => selector(new Map()),
+    })
+
+  /* One conversation on stage, one empty pane, no saved split yet. */
+  hook.bind('p1', 's1')
+  let tree = render()
+  const emptyPane = byClass(tree, 'mv-pane')[1]
+  const rows = byClass(emptyPane, 'mv-picker-item')
+  assert.equal(rows.length, 2, 'both conversations are offered')
+
+  const onStageRow = rows.find((row) => textOf(row).startsWith('s1'.toUpperCase()))
+  const freeRow = rows.find((row) => textOf(row).startsWith('s2'.toUpperCase()))
+  assert.ok(onStageRow !== undefined && freeRow !== undefined, 'one row per conversation')
+
+  /* The on-stage row stays pickable — moving a conversation is legitimate — but it explains itself. */
+  assert.notEqual(onStageRow.props.disabled, true, 'moving a conversation stays possible')
+  assert.equal(textOf(onStageRow), 'S1pickOnStage', 'the row is labelled as already on this split')
+  assert.equal(textOf(freeRow), 'S2', 'a free conversation carries no such label')
 })
