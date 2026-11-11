@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.79 — 2026-11-11
+
+### 修复：`ResizeObserver` 循环警告（悬了半个多月的补丁）
+
+宽窄切换曾在控制台报 `ResizeObserver loop completed with undelivered notifications.`——不崩溃，但看起来像出错。这个补丁从 `.dev/pending/` 一直没发，因为它从未在运行中的应用里验证过。
+
+两处改动：
+
+1. **把状态提交推迟到下一帧**：在 observer 回调里直接 `setState` 会让折叠与测量落在同一次 resize pass 里，浏览器据此报循环；推迟后测量与更新分属不同 pass，并用「上次值」守卫避免 resize 风暴排队。
+2. **初值改为「未知」而不是「首次测量」**：组件默认按宽舞台挂载，若挂载时本就是窄的，用测量值做初值会让**第一次纠正变成 no-op**。
+
+### 验证
+
+- 本地：77/77 测试通过；窄窗测试改为等待一帧（这正是新语义），并补上 `requestAnimationFrame` 的全局暴露（bundle 调用的是裸函数，不是 `window.requestAnimationFrame`）。
+- 两条 fuzz 复跑：状态机 25×200 步、渲染 20×150 状态，零违规。
+- **真实宿主**：待确认（`docs/VERIFY-BY-HAND.md` 7.3）。
+
+### 说明
+
+- 该补丁曾在 UTF-16 下保存，`git apply` 读不了；已转为 UTF-8。
+
+
+
 ## 0.1.78 — 2026-11-11
 
 ### 文档：交接说明
@@ -1002,7 +1025,8 @@ loader id 与 inject 导出由 `scripts/build.mjs` **生成**，改源码无效�
 
 ### 变更
 
-- **注意力口径定为"不含运行中"**（用户 2026-11-11 拍板）：Mod+Alt+J 只在「等待回答」与「完成未读」之间跳转；仅仅在产出内容不算需要你。规则从渲染层移到 model.ts 的纯函数 mvAttentionPanes / mvNextAttentionPane，并加了单元测试锁定——变异验证：把 unning 也算进去，测试立即失败。
+- **注意力口径定为"不含运行中"**（用户 2026-11-11 拍板）：Mod+Alt+J 只在「等待回答」与「完成未读」之间跳转；仅仅在产出内容不算需要你。规则从渲染层移到 model.ts 的纯函数 mvAttentionPanes / mvNextAttentionPane，并加了单元测试锁定——变异验证：把 
+unning 也算进去，测试立即失败。
 - 说明：窄窗切换器**仍会**显示运行中状态点（那是"看清谁在产出"的展示），与跳转口径不同，属有意设计。
 
 ### 实测（win11-test）

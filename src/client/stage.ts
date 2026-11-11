@@ -1118,11 +1118,34 @@ function MultiviewStage(props) {
   React.useEffect(() => {
     const element = rootRef.current
     if (element === null || typeof ResizeObserver !== 'function') return undefined
+    /* Committing state from inside the observer callback makes the collapse happen during
+       the same resize pass, which browsers report as "ResizeObserver loop completed with
+       undelivered notifications" — a warning that looks like a crash in a user console.
+       Deferring to the next frame keeps the measurement and the update in separate passes,
+       and the last-value guard keeps a resize storm from queueing renders. */
+    let pending = false
+    /* Starts as "unknown" on purpose: the component mounts assuming a wide stage, so a
+       stage that is already narrow when it appears must still get its first correction
+       (seeding this from the measurement would make that first correction a no-op). */
+    let last = null
+    let frame = 0
+    const measure = () => {
+      pending = false
+      const next = element.clientWidth < 900 || element.clientHeight < 520
+      if (next === last) return
+      last = next
+      setNarrow(next)
+    }
     const observer = new ResizeObserver(() => {
-      setNarrow(element.clientWidth < 900 || element.clientHeight < 520)
+      if (pending) return
+      pending = true
+      frame = requestAnimationFrame(measure)
     })
     observer.observe(element)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (frame !== 0) cancelAnimationFrame(frame)
+    }
   }, [])
 
   React.useEffect(() => {

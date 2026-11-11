@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.78';
+const MV_PLUGIN_VERSION = '0.1.79';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -2747,11 +2747,26 @@ function MultiviewStage(props) {
     React.useEffect(()=>{
         const element = rootRef.current;
         if (element === null || typeof ResizeObserver !== 'function') return undefined;
+        let pending = false;
+        let last = null;
+        let frame = 0;
+        const measure = ()=>{
+            pending = false;
+            const next = element.clientWidth < 900 || element.clientHeight < 520;
+            if (next === last) return;
+            last = next;
+            setNarrow(next);
+        };
         const observer = new ResizeObserver(()=>{
-            setNarrow(element.clientWidth < 900 || element.clientHeight < 520);
+            if (pending) return;
+            pending = true;
+            frame = requestAnimationFrame(measure);
         });
         observer.observe(element);
-        return ()=>observer.disconnect();
+        return ()=>{
+            observer.disconnect();
+            if (frame !== 0) cancelAnimationFrame(frame);
+        };
     }, []);
     React.useEffect(()=>{
         const move = (event)=>{

@@ -534,7 +534,7 @@ test('Escape cancels the change without touching the pane', () => {
   assert.deepEqual(leaves.map((leaf) => leaf.sessionId), ['s1', 's2'], 'nothing was rebound')
 })
 
-test('a narrow stage shows one pane plus a switcher that carries status', () => {
+test('a narrow stage shows one pane plus a switcher that carries status', async () => {
   const list = makeSessions(['s1', 's2', 's3'])
   const { stage, hook, resize } = bootHost({ sessions: list })
   const harness = createHarness()
@@ -555,9 +555,14 @@ test('a narrow stage shows one pane plus a switcher that carries status', () => 
   hook.bind('p2', 's2')
   hook.bind('p3', 's3')
 
+  /* The observer now commits state on the next frame (that deferral is what stops the browser's
+     "ResizeObserver loop" warning), so every resize needs one tick before the next render. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
   /* Wide: every pane is on screen and there is no switcher. */
   let tree = render()
   resize({ width: 1400, height: 900 })
+  await settle()
   tree = render()
   assert.equal(byClass(tree, 'mv-pane').length, 3, 'a wide stage shows all three panes')
   const wideStrip = byClass(tree, 'mv-strip')[0]
@@ -565,6 +570,7 @@ test('a narrow stage shows one pane plus a switcher that carries status', () => 
 
   /* Narrow: one pane, and the other conversations survive as chips with their own status. */
   resize({ width: 700, height: 900 })
+  await settle()
   tree = render()
   assert.equal(byClass(tree, 'mv-pane').length, 1, 'a narrow stage shows one pane')
   /* The switcher lives in the strip; its chips share a class with the shape buttons. */
@@ -585,6 +591,7 @@ test('a narrow stage shows one pane plus a switcher that carries status', () => 
 
   /* Back to wide, everything returns. */
   resize({ width: 1400, height: 900 })
+  await settle()
   tree = render()
   assert.equal(byClass(tree, 'mv-pane').length, 3, 'widening restores the whole split')
 })

@@ -342,7 +342,15 @@ export function bootHost(options = {}) {
   window.localStorage = localStorage
   window.document = document
   window.window = window
-  Object.assign(globalThis, { window, document, localStorage, location: window.location })
+  Object.assign(globalThis, {
+    window,
+    document,
+    localStorage,
+    location: window.location,
+    /* Called bare, not through `window`, by code that defers work to the next frame. */
+    requestAnimationFrame: window.requestAnimationFrame,
+    cancelAnimationFrame: window.cancelAnimationFrame,
+  })
 
   const registered = []
   registered.shortcuts = []
