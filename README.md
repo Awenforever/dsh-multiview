@@ -67,6 +67,8 @@ See [docs/VERIFY-BY-HAND.md](docs/VERIFY-BY-HAND.md) for the checklist of behavi
 
 Where the project stands — what changed since 0.1.28, what is verified and what is not: [docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md).
 
+Who this is for, and the honest state of demand evidence: [docs/POSITIONING.md](docs/POSITIONING.md).
+
 ## Not supported in v1 (on purpose)
 
 1. **File preview / diff inside a pane** — whenever any global panel is active, DSH unmounts the right sidebar's session surface (`no session surface is mounted`; shipped panels behave the same). Use ↗ to work in the native view.

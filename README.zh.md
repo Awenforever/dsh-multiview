@@ -65,6 +65,8 @@ English | [中文](README.zh.md)
 
 项目现状（0.1.28 以来的变化、已验证与未验证的部分）：[docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md)。
 
+目标用户与需求证据的诚实评审：[docs/POSITIONING.md](docs/POSITIONING.md)。
+
 ## 明确不支持（v1）
 
 这些是**刻意**不做的，不是遗漏：
