@@ -32,6 +32,7 @@ import {
   mvWorkspaceLabel,
   mvDisplayTitle,
   mvFirstText,
+  mvClip,
 }from '../src/client/model.ts'
 
 /** Every leaf in reading order, as `[paneId, sessionId]` tuples. */
@@ -468,4 +469,40 @@ test('numbers and booleans are values, not absences', () => {
 
 test('a real message is trimmed', () => {
   assert.equal(mvFirstText(['  磁盘已满  '], '失败'), '磁盘已满')
+})
+
+test('clipping never splits a character in half', () => {
+  /* `slice(0, 14)` counts UTF-16 code units. An emoji is two of them, so a cut that lands inside the
+     pair renders half a character. */
+  const emoji = String.fromCodePoint(0x1f389)
+  const title = 'abcdefghijklm' + emoji + 'tail'
+  const clipped = mvClip(title, 14, '…')
+  assert.equal(clipped, 'abcdefghijklm' + emoji + '…', 'the emoji stays whole')
+  assert.equal([...clipped].length, 15, 'fourteen characters plus the ellipsis')
+  assert.ok(!clipped.includes(String.fromCharCode(0xfffd)), 'no replacement glyph is produced')
+})
+
+test('a short title is returned untouched', () => {
+  assert.equal(mvClip('短标题', 14, '…'), '短标题')
+  assert.equal(mvClip('abcdefghijklmn', 14, '…'), 'abcdefghijklmn', 'exactly at the limit keeps every character')
+  assert.equal(mvClip('abcdefghijklmno', 14, '…'), 'abcdefghijklmn…')
+})
+
+test('clipping tolerates junk input', () => {
+  assert.equal(mvClip(undefined, 5, '…'), '')
+  assert.equal(mvClip(null, 5, '…'), '')
+  assert.equal(mvClip(123456, 3, '…'), '123…')
+  assert.equal(mvClip('abc', 0, '…'), '…', 'a zero limit keeps nothing but the marker')
+  assert.equal(mvClip('abc', -4, ''), '', 'a negative limit keeps nothing at all')
+})
+
+test('the split-name cap counts characters, not code units', () => {
+  const emoji = String.fromCodePoint(0x1f9e9)
+  const name = emoji.repeat(40)
+  const capped = mvClip(name, 60, '')
+  assert.equal([...capped].length, 40, 'forty emoji are under the cap and stay whole')
+  assert.equal(capped, name)
+  const long = emoji.repeat(70)
+  assert.equal([...mvClip(long, 60, '')].length, 60)
+  assert.ok(!mvClip(long, 60, '').includes(String.fromCharCode(0xfffd)))
 })

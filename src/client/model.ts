@@ -121,6 +121,24 @@ export function mvSessionState(status: any): string {
 }
 
 /**
+ * Clip text to a maximum number of characters, on whole code points.
+ *
+ * `String.prototype.slice` counts UTF-16 code units, so a cut that lands inside a surrogate pair
+ * produces half a character — a replacement glyph in the label. Iterating code points keeps every
+ * character whole.
+ * @param text - the text to clip.
+ * @param max - maximum number of characters to keep.
+ * @param ellipsis - appended when something was dropped.
+ */
+export function mvClip(text: any, max: number, ellipsis: string): string {
+  const source = text === undefined || text === null ? '' : String(text)
+  const limit = Number.isFinite(max) && max > 0 ? Math.floor(max) : 0
+  const characters = Array.from(source)
+  if (characters.length <= limit) return source
+  return characters.slice(0, limit).join('') + ellipsis
+}
+
+/**
  * First candidate that is worth showing.
  *
  * A chain of `??` stops at an empty string, so a blank message or title wins over the fallback and

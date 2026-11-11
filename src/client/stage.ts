@@ -1260,7 +1260,7 @@ function MultiviewStage(props) {
             onClick: () => mvFocus(leaf.id),
           },
           dot === 'idle' ? null : h('span', { className: 'mv-dot', 'data-state': dot, 'aria-hidden': true }),
-          title.length > 14 ? title.slice(0, 14) + '…' : title,
+          mvClip(title, 14, '…'),
         )
       })
     : []

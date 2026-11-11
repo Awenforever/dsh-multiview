@@ -619,7 +619,7 @@ function mvPutInPane(sessionId: string): string | null {
  * @param name - user-chosen name, trimmed; empty clears the custom name.
  */
 function mvRenameView(viewId: string, name: string): void {
-  const trimmed = String(name ?? '').trim().slice(0, 60)
+  const trimmed = mvClip(String(name ?? '').trim(), 60, '')
   mvCommit((current) => ({
     ...current,
     views: (current.views ?? []).map((view) =>

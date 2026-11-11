@@ -340,6 +340,13 @@ function mvSessionState(status) {
     if (status.completionUnread === true) return 'unread';
     return 'idle';
 }
+function mvClip(text, max, ellipsis) {
+    const source = text === undefined || text === null ? '' : String(text);
+    const limit = Number.isFinite(max) && max > 0 ? Math.floor(max) : 0;
+    const characters = Array.from(source);
+    if (characters.length <= limit) return source;
+    return characters.slice(0, limit).join('') + ellipsis;
+}
 function mvFirstText(candidates, fallback) {
     for (const candidate of candidates){
         if (typeof candidate === 'string') {
@@ -1250,7 +1257,7 @@ function mvPutInPane(sessionId) {
     return fallback.id;
 }
 function mvRenameView(viewId, name) {
-    const trimmed = String(name ?? '').trim().slice(0, 60);
+    const trimmed = mvClip(String(name ?? '').trim(), 60, '');
     mvCommit((current)=>({
             ...current,
             views: (current.views ?? []).map((view)=>view.id === viewId ? trimmed === '' ? {
@@ -2977,7 +2984,7 @@ function MultiviewStage(props) {
             className: 'mv-dot',
             'data-state': dot,
             'aria-hidden': true
-        }), title.length > 14 ? title.slice(0, 14) + '…' : title);
+        }), mvClip(title, 14, '…'));
     }) : [];
     return h('div', {
         ref: rootRef,
