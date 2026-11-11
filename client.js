@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.44';
+const MV_PLUGIN_VERSION = '0.1.45';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -372,11 +372,19 @@ function mvDedupeViews(views) {
 function mvLeafCount(node) {
     return mvLeaves(node).length;
 }
-function mvShapeTo(node, count) {
+function mvShapeTo(node, count, focusedId) {
     const target = Math.max(2, Math.min(MV_MAX_PANES, count));
     const current = mvLeaves(node);
     if (current.length === target) return node;
     const sessions = current.map((leaf)=>leaf.sessionId);
+    if (target < current.length && focusedId !== undefined) {
+        const index = current.findIndex((leaf)=>leaf.id === focusedId);
+        if (index > target - 1) {
+            const watched = sessions[index];
+            sessions.splice(index, 1);
+            sessions.unshift(watched);
+        }
+    }
     const next = mvPreset(target);
     const leaves = mvLeaves(next);
     for(let index = 0; index < leaves.length; index += 1)leaves[index].sessionId = sessions[index] ?? null;
@@ -835,7 +843,7 @@ function mvViewOwner(sessionId, views, currentViewId) {
 }
 function mvSetShape(count) {
     mvCommit((current)=>{
-        const layout = mvShapeTo(current.layout, count);
+        const layout = mvShapeTo(current.layout, count, current.focused);
         if (layout === current.layout) return current;
         const leaves = mvLeaves(layout);
         const focused = leaves.some((leaf)=>leaf.id === current.focused) ? current.focused : leaves[0].id;

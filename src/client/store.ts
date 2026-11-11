@@ -363,7 +363,7 @@ function mvViewOwner(sessionId: string, views: any[], currentViewId: string | nu
 /** Switch to a preset pane count, carrying bound Sessions in reading order. */
 function mvSetShape(count: number): void {
   mvCommit((current) => {
-    const layout = mvShapeTo(current.layout, count)
+    const layout = mvShapeTo(current.layout, count, current.focused)
     if (layout === current.layout) return current
     const leaves = mvLeaves(layout)
     const focused = leaves.some((leaf) => leaf.id === current.focused) ? current.focused : leaves[0].id

@@ -210,11 +210,32 @@ export function mvLeafCount(node: any): number {
  * @param count - target pane count (2..4).
  * @returns the new preset tree, or `node` when the count is unchanged.
  */
-export function mvShapeTo(node: any, count: number): any {
+/**
+ * Rebuild the tree with a different pane count.
+ *
+ * Growing keeps every bound Session in place and adds empty panes. Shrinking has to drop some
+ * conversations, and dropping by position alone throws away the one the user is looking at when
+ * it happens to sit in the later panes — so the focused pane wins the first slot and the rest
+ * follow in reading order.
+ * @param node - current tree (any shape).
+ * @param count - target pane count (2..4).
+ * @param focusedId - the pane the user is on, when known.
+ * @returns the new preset tree, or `node` when the count is unchanged.
+ */
+export function mvShapeTo(node: any, count: number, focusedId?: string): any {
   const target = Math.max(2, Math.min(MV_MAX_PANES, count))
   const current = mvLeaves(node)
   if (current.length === target) return node
   const sessions: (string | null)[] = current.map((leaf) => leaf.sessionId)
+  if (target < current.length && focusedId !== undefined) {
+    const index = current.findIndex((leaf) => leaf.id === focusedId)
+    if (index > target - 1) {
+      /* Move the watched Session to the front so it survives the cut. */
+      const watched = sessions[index]
+      sessions.splice(index, 1)
+      sessions.unshift(watched)
+    }
+  }
   const next = mvPreset(target)
   const leaves = mvLeaves(next)
   for (let index = 0; index < leaves.length; index += 1) leaves[index].sessionId = sessions[index] ?? null

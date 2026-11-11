@@ -280,3 +280,31 @@ test('status classification has one source of truth, and attention has one rule'
   assert.equal(mvNeedsAttention('idle'), false)
   assert.equal(mvNeedsAttention(''), false)
 })
+
+test('shrinking keeps the conversation you are watching, growing leaves every seat alone', () => {
+  /* Four bound panes, focused on the last one. */
+  let tree = mvWithSession(mvWithSession(mvPreset(4), 'p1', 'a'), 'p2', 'b')
+  tree = mvWithSession(tree, 'p3', 'c')
+  tree = mvWithSession(tree, 'p4', 'd')
+  assert.deepEqual(mvLeaves(tree).map((leaf) => leaf.sessionId), ['a', 'b', 'c', 'd'])
+
+  /* Dropping to two panes keeps the watched Session, in the first seat. */
+  const shrunk = mvShapeTo(tree, 2, 'p4')
+  assert.deepEqual(mvLeaves(shrunk).map((leaf) => leaf.sessionId), ['d', 'a'])
+
+  /* When the watched pane is already inside the surviving range, order is untouched. */
+  const shrunkEarly = mvShapeTo(tree, 2, 'p1')
+  assert.deepEqual(mvLeaves(shrunkEarly).map((leaf) => leaf.sessionId), ['a', 'b'])
+
+  /* Shrinking to three keeps the watched Session too. */
+  const shrunkThree = mvShapeTo(tree, 3, 'p4')
+  assert.deepEqual(mvLeaves(shrunkThree).map((leaf) => leaf.sessionId), ['d', 'a', 'b'])
+
+  /* Growing never moves a Session out of its seat. */
+  const two = mvWithSession(mvWithSession(mvPreset(2), 'p1', 'a'), 'p2', 'b')
+  const grown = mvShapeTo(two, 4, 'p2')
+  assert.deepEqual(mvLeaves(grown).map((leaf) => leaf.sessionId), ['a', 'b', null, null])
+
+  /* Without a focus hint the old positional rule still applies, so callers stay simple. */
+  assert.deepEqual(mvLeaves(mvShapeTo(tree, 2)).map((leaf) => leaf.sessionId), ['a', 'b'])
+})
