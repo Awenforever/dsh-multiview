@@ -87,22 +87,7 @@ function mvViewSet(layout: any): string {
  * @returns the de-duplicated list, order preserved by first appearance.
  */
 function mvNormalizeViews(views: any[]): any[] {
-  const best = new Map()
-  const order = []
-  for (const view of views) {
-    const set = mvViewSet(view.layout)
-    if (set === '') continue
-    const seen = best.get(set)
-    if (seen === undefined) {
-      best.set(set, view)
-      order.push(set)
-      continue
-    }
-    const newer = (view.savedAt ?? 0) > (seen.savedAt ?? 0)
-    const preferred = newer || (typeof seen.customName !== 'string' && typeof view.customName === 'string') ? view : seen
-    best.set(set, preferred)
-  }
-  return order.map((set) => best.get(set))
+  return mvDedupeViews(views)
 }
 
 /** Readable label for a split: the joined Session titles. */

@@ -1,7 +1,7 @@
 {
   "name": "dsh-multiview",
-  "version": "0.1.35",
-  "description": "Multi-view for DeepSeek Harness: 2-4 live conversations side by side, each pane a real Chat, with resize, swap, saved splits and pane focus.",
+  "version": "0.1.36",
+  "description": "2-4 real Chats you rearrange entirely from the keyboard, save as named layouts, and jump through by which pane needs you.",
   "type": "module",
   "license": "MIT",
   "author": "Awenforever",

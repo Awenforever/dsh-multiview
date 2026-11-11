@@ -64,5 +64,12 @@ count.
 
 An honest one-line summary, used for the marketplace entry:
 
-> 2-4 real Chats in one DSH window: every pane is the shipped Chat, with drag-resize, pane
-> swap, rebindable keyboard focus, and remembered splits you can restore.
+> 2-4 real Chats you rearrange entirely from the keyboard, save as named layouts, and jump
+> through by which pane needs you.
+
+The summary deliberately does not lead with pane count. The marketplace review's only FAIL
+was that the earlier one-liner ("2-4 live conversations side by side") restated what
+`dsh-split-workspace` already says, while this plugin is the least capable member of the set
+by raw pane count — so that sentence advertised exactly the axis we are weakest on. The
+line now leads with the three things no other entry in the catalogue has: a complete
+keyboard layer, named saved arrangements, and attention routing.

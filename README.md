@@ -1,5 +1,7 @@
 # dsh-multiview — split view for DeepSeek Harness
 
+2-4 real Chats you rearrange entirely from the keyboard, save as named layouts, and jump through by which pane needs you.
+
 > Two to four **real** conversations side by side in one window. Every pane is the shipped Chat: composer, streaming, tool cards, approval cards, `ask_user_question`, attachments, slash commands, stop/queue.
 >
 > The goal is not "a working split view" — it is to read as a feature the app ships with: no title-bar takeover, no layout hijacking, no monkey-patching of private extension points.

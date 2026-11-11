@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.35';
+const MV_PLUGIN_VERSION = '0.1.36';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -332,6 +332,29 @@ function mvNextAttentionPane(node, focusedId, statusOf) {
     const after = candidates.filter((id)=>order.indexOf(id) > from);
     return after.length > 0 ? after[0] : candidates[0];
 }
+function mvDedupeViews(views) {
+    const best = new Map();
+    const order = [];
+    for (const view of views){
+        if (view === null || view === undefined || view.layout === null || view.layout === undefined) continue;
+        const key = mvArrangementKey(view.layout);
+        if (mvSessionSet(view.layout) === '' || mvSessionSet(view.layout).indexOf(',') < 0) continue;
+        const seen = best.get(key);
+        if (seen === undefined) {
+            best.set(key, view);
+            order.push(key);
+            continue;
+        }
+        const seenNamed = typeof seen.customName === 'string';
+        const viewNamed = typeof view.customName === 'string';
+        let preferred;
+        if (seenNamed && !viewNamed) preferred = seen;
+        else if (!seenNamed && viewNamed) preferred = view;
+        else preferred = (view.savedAt ?? 0) > (seen.savedAt ?? 0) ? view : seen;
+        best.set(key, preferred);
+    }
+    return order.map((key)=>best.get(key));
+}
 function mvLeafCount(node) {
     return mvLeaves(node).length;
 }
@@ -555,22 +578,7 @@ function mvViewSet(layout) {
     return mvArrangementKey(layout);
 }
 function mvNormalizeViews(views) {
-    const best = new Map();
-    const order = [];
-    for (const view of views){
-        const set = mvViewSet(view.layout);
-        if (set === '') continue;
-        const seen = best.get(set);
-        if (seen === undefined) {
-            best.set(set, view);
-            order.push(set);
-            continue;
-        }
-        const newer = (view.savedAt ?? 0) > (seen.savedAt ?? 0);
-        const preferred = newer || typeof seen.customName !== 'string' && typeof view.customName === 'string' ? view : seen;
-        best.set(set, preferred);
-    }
-    return order.map((set)=>best.get(set));
+    return mvDedupeViews(views);
 }
 function mvViewName(layout) {
     let list = null;

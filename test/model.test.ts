@@ -16,6 +16,7 @@ import {
   mvResize,
   mvSanitize,
   mvArrangementKey,
+  mvDedupeViews,
   mvAttentionPanes,
   mvNextAttentionPane,
   mvSessionSet,
@@ -216,4 +217,46 @@ test('attention excludes running, which is the agreed product rule', () => {
   assert.equal(mvNextAttentionPane(withThird, 'p1', statusOf2), 'p2')
   assert.equal(mvNextAttentionPane(withThird, 'p3', statusOf2), 'p1')
   assert.equal(mvNextAttentionPane(withThird, 'p2', statusOf2), 'p1')
+})
+
+test('loading an old profile collapses the duplicate arrangements older builds created', () => {
+  const two = mvWithSession(mvWithSession(mvPreset(2), 'p1', 'a'), 'p2', 'b')
+  const swapped = mvSwapSessions(two, 'p1', 'p2')
+  const three = mvWithSession(mvShapeTo(two, 3), 'p3', 'c')
+  const empty = mvPreset(2)
+
+  const views = [
+    { id: 'old-swapped', layout: swapped, savedAt: 10 },
+    { id: 'new-ordered', layout: two, savedAt: 20 },
+    { id: 'three', layout: three, savedAt: 15 },
+    { id: 'single', layout: mvWithSession(mvPreset(2), 'p1', 'a'), savedAt: 30 },
+    { id: 'empty', layout: empty, savedAt: 40 },
+  ]
+
+  const deduped = mvDedupeViews(views)
+  const ids = deduped.map((view) => view.id)
+
+  /* The same Sessions in the same shape collapse to one entry: the newer one wins. */
+  assert.deepEqual(ids, ['new-ordered', 'three'])
+  assert.equal(deduped.length, 2)
+
+  /* A different pane count survives as its own arrangement. */
+  assert.ok(ids.includes('three'))
+
+  /* Splits that cannot be restored (one Session, or none) are dropped. */
+  assert.ok(!ids.includes('single'))
+  assert.ok(!ids.includes('empty'))
+})
+
+test('a hand-written name outranks a newer unnamed entry when collapsing', () => {
+  const two = mvWithSession(mvWithSession(mvPreset(2), 'p1', 'a'), 'p2', 'b')
+  const swapped = mvSwapSessions(two, 'p1', 'p2')
+
+  const kept = mvDedupeViews([
+    { id: 'named', layout: two, savedAt: 10, customName: '盯盘 A 组' },
+    { id: 'newer-unnamed', layout: swapped, savedAt: 99 },
+  ])
+
+  assert.equal(kept.length, 1)
+  assert.equal(kept[0].id, 'named', 'losing the typed name would be worse than losing the timestamp')
 })

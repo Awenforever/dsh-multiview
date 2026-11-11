@@ -133,6 +133,43 @@ export function mvNextAttentionPane(node: any, focusedId: string, statusOf: (ses
   return after.length > 0 ? after[0] : candidates[0]
 }
 
+/**
+ * Collapse saved splits that describe the same arrangement, keeping the better entry.
+ *
+ * Older builds keyed saved splits on the ordered Session list, so an existing profile can
+ * hold one entry per arrangement of the same Sessions. "Better" means the most recently
+ * saved, except that a name the user typed outranks an unnamed entry: losing a hand-written
+ * name silently would be worse than losing a timestamp.
+ * @param views - saved splits, newest first or in any order.
+ * @returns one entry per arrangement, in first-appearance order; entries holding fewer than
+ * two Sessions are dropped because they cannot be restored as a split.
+ */
+export function mvDedupeViews(views: any[]): any[] {
+  const best = new Map()
+  const order = []
+  for (const view of views) {
+    if (view === null || view === undefined || view.layout === null || view.layout === undefined) continue
+    const key = mvArrangementKey(view.layout)
+    if (mvSessionSet(view.layout) === '' || mvSessionSet(view.layout).indexOf(',') < 0) continue
+    const seen = best.get(key)
+    if (seen === undefined) {
+      best.set(key, view)
+      order.push(key)
+      continue
+    }
+    const seenNamed = typeof seen.customName === 'string'
+    const viewNamed = typeof view.customName === 'string'
+    /* Recency decides only between equals: when exactly one side carries a name the user
+       typed, that side survives, because a name cannot be regenerated but a timestamp can. */
+    let preferred
+    if (seenNamed && !viewNamed) preferred = seen
+    else if (!seenNamed && viewNamed) preferred = view
+    else preferred = (view.savedAt ?? 0) > (seen.savedAt ?? 0) ? view : seen
+    best.set(key, preferred)
+  }
+  return order.map((key) => best.get(key))
+}
+
 /** Pane count of one tree. */
 export function mvLeafCount(node: any): number {
   return mvLeaves(node).length
