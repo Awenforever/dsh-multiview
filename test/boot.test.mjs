@@ -102,7 +102,7 @@ function installDom(store) {
 }
 
 /** Fake client context: records registrations, stubs every service the bundle touches. */
-function createContext() {
+function createContext(overrides = {}) {
   const registered = []
   registered.shortcuts = []
   const injected = []
@@ -125,13 +125,20 @@ function createContext() {
     locale: { register: () => {}, bind: () => (key) => key },
     slots,
     sessions: {
-      list: { getSnapshot: () => SESSIONS },
+      list: {
+        getSnapshot: () => (overrides.sessionsList === undefined ? SESSIONS : overrides.sessionsList()),
+      },
       retain: () => ({ ready: Promise.resolve(), release: () => {} }),
-      useList: (selector) => selector(SESSIONS),
+      useList: (selector) =>
+        selector(overrides.sessionsList === undefined ? SESSIONS : overrides.sessionsList()),
     },
     workspaces: {
-      list: { getSnapshot: () => ({ groups: [], workspaceId: 'default' }) },
-      useList: (selector) => selector({ groups: [], workspaceId: 'default' }),
+      list: {
+        getSnapshot: () =>
+          overrides.workspaces === undefined ? { groups: [], workspaceId: 'default' } : overrides.workspaces,
+      },
+      useList: (selector) =>
+        selector(overrides.workspaces === undefined ? { groups: [], workspaceId: 'default' } : overrides.workspaces),
     },
     layout: {
       panelInfo: { getSnapshot: () => ({ activePanelId: 'multiview' }) },
@@ -382,9 +389,9 @@ test('the sidebar icon badges attention, and stays quiet when nothing needs you'
  * @param seed - optional persisted multiview payload.
  * @returns the debug hook plus the host objects.
  */
-function bootWithHook(seed, rawSeed) {
+function bootWithHook(seed, rawSeed, overrides) {
   const dom = installDom(rawSeed !== undefined ? { 'dsh.multiview.v1': rawSeed } : seed === undefined ? {} : { 'dsh.multiview.v1': JSON.stringify(seed) })
-  const context = createContext()
+  const context = createContext(overrides)
   let loaded = null
   const host = globalThis
   host.__ModuleLoader__ = { load: (spec) => { loaded = spec } }
@@ -641,4 +648,165 @@ test('a corrupted or impossible saved state is repaired on load', () => {
   const lonely = bootWithHook(undefined, seedOf({ kind: 'leaf', id: 'p1', sessionId: 's1' })).hook
   assert.equal(leavesOf(lonely).length, 2, 'a saved single pane is widened to two')
   assert.equal(leavesOf(lonely)[0].sessionId, 's1', 'the saved Session keeps its place when widening')
+})
+
+test('reconciliation clears Sessions that vanished or were archived, keeping pane positions', () => {
+  const layoutOf = (first, second) => ({
+    version: 3,
+    layout: {
+      kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p1', sessionId: first },
+      b: { kind: 'leaf', id: 'p2', sessionId: second },
+    },
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    views: [],
+    currentViewId: null,
+  })
+
+  /* The right pane points at a Session the host no longer has. */
+  const gone = bootWithHook(layoutOf('s1', 'session-that-vanished')).hook
+  gone.reconcile()
+  assert.deepEqual(
+    leavesOf(gone).map((leaf) => leaf.sessionId),
+    ['s1', null],
+    'a vanished Session is cleared while the surviving pane keeps its place',
+  )
+
+  /* An archived Session is treated the same way. */
+  const archived = bootWithHook(layoutOf('s1', 's2'), undefined, {
+    workspaces: { groups: [], workspaceId: 'default', archivedSessionIds: ['s2'] },
+  }).hook
+  archived.reconcile()
+  assert.deepEqual(
+    leavesOf(archived).map((leaf) => leaf.sessionId),
+    ['s1', null],
+    'an archived Session is cleared',
+  )
+
+  /* A blank Session (a row the host has but never used) is cleared too. */
+  const blank = bootWithHook(layoutOf('s1', 's2'), undefined, {
+    sessionsList: () => ({
+      phase: 'ready',
+      ids: ['s1', 's2'],
+      byId: { s1: { id: 's1', title: 'Alpha', blank: false }, s2: { id: 's2', title: '', blank: true } },
+    }),
+  }).hook
+  blank.reconcile()
+  assert.deepEqual(
+    leavesOf(blank).map((leaf) => leaf.sessionId),
+    ['s1', null],
+    'a blank Session is cleared',
+  )
+})
+
+test('reconciliation waits for the session list, and does not run twice', () => {
+  let snapshot = { phase: 'loading', ids: [], byId: {} }
+  const { hook } = bootWithHook(
+    {
+      version: 3,
+      layout: {
+        kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+        a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+        b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+      },
+      focused: 'p1',
+      preset: 2,
+      seeded: true,
+      views: [],
+      currentViewId: null,
+    },
+    undefined,
+    { sessionsList: () => snapshot },
+  )
+
+  hook.reconcile()
+  assert.deepEqual(
+    leavesOf(hook).map((leaf) => leaf.sessionId),
+    ['s1', 's2'],
+    'nothing is cleared while the list is still loading',
+  )
+
+  /* The list arrives without s2: the retry clears it, which is why the effect depends on it. */
+  snapshot = {
+    phase: 'ready',
+    ids: ['s1'],
+    byId: { s1: { id: 's1', title: 'Alpha', blank: false } },
+  }
+  hook.reconcile()
+  assert.deepEqual(
+    leavesOf(hook).map((leaf) => leaf.sessionId),
+    ['s1', null],
+    'the retry after the list loads clears the missing Session',
+  )
+
+  /* Reconciled is a one-shot: a later call must not undo a binding the user just made. */
+  hook.bind('p2', 's1')
+  hook.reconcile()
+  assert.equal(
+    leavesOf(hook).filter((leaf) => leaf.sessionId === 's1').length,
+    1,
+    'a second reconcile does not run again',
+  )
+})
+
+test('archiving while the split is open drops the Session, and nothing else moves', () => {
+  let archived = []
+  const { hook } = bootWithHook(
+    {
+      version: 3,
+      layout: {
+        kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+        a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+        b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+      },
+      focused: 'p2',
+      preset: 2,
+      seeded: true,
+      views: [],
+      currentViewId: null,
+    },
+    undefined,
+    { workspaces: { groups: [], workspaceId: 'default', get archivedSessionIds() { return archived } } },
+  )
+
+  /* The one-shot reconcile has run (or not); archiving must still be honoured afterwards. */
+  hook.reconcile()
+  assert.deepEqual(leavesOf(hook).map((leaf) => leaf.sessionId), ['s1', 's2'], 'nothing archived yet')
+
+  archived = ['s1']
+  hook.clearArchived()
+  assert.deepEqual(
+    leavesOf(hook).map((leaf) => leaf.sessionId),
+    [null, 's2'],
+    'the archived Session leaves its pane and the survivor keeps its position',
+  )
+  assert.equal(hook.state().focused, 'p2', 'focus stays on the pane the user was on')
+
+  /* When the focused pane is the archived one, focus falls back to a pane that still exists. */
+  archived = ['s2']
+  hook.clearArchived()
+  assert.equal(
+    leavesOf(hook).some((leaf) => leaf.id === hook.state().focused),
+    true,
+    'focus never points at a pane that no longer exists',
+  )
+
+  /* A host that does not publish an archived set must not break anything. */
+  const bare = bootWithHook({
+    version: 3,
+    layout: {
+      kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+      a: { kind: 'leaf', id: 'p1', sessionId: 's1' },
+      b: { kind: 'leaf', id: 'p2', sessionId: 's2' },
+    },
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    views: [],
+    currentViewId: null,
+  }).hook
+  bare.clearArchived()
+  assert.deepEqual(leavesOf(bare).map((leaf) => leaf.sessionId), ['s1', 's2'], 'no archived set means no clearing')
 })

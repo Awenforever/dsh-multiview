@@ -267,6 +267,26 @@ function mvReset(): void {
 }
 
 /**
+ * Archived Sessions leave the split, every time the list changes.
+ *
+ * `mvReconcile` runs once per mount on purpose: right after a bind the list may not have
+ * caught up, and clearing a pane the user just bound would fight them. The archived set has
+ * no such lag — it is authoritative — so a Session that gets archived while the split is open
+ * is dropped from its pane instead of lingering there until the next reload.
+ */
+function mvClearArchived(): void {
+  try {
+    const kept = mvReconcileTree(mvState.layout, (sessionId) => (mvIsArchived(sessionId) ? null : sessionId))
+    if (kept === mvState.layout) return
+    const leaves = mvLeaves(kept)
+    const focused = leaves.some((leaf) => leaf.id === mvState.focused) ? mvState.focused : leaves[0].id
+    mvCommit((current) => ({ ...current, layout: kept, focused }))
+  } catch (error) {
+    /* The archived set is optional; a host without it simply never clears anything. */
+  }
+}
+
+/**
  * Drop bindings whose Session vanished or was archived, keeping pane positions.
  * Runs once per mount, after the controller list is ready.
  */

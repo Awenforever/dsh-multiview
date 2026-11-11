@@ -919,6 +919,7 @@ function MultiviewStage(props) {
 
   React.useEffect(() => {
     mvReconcile()
+    mvClearArchived()
     if (openedRef.current) return
     try {
       const snapshot = PTX.sessions.list.getSnapshot()

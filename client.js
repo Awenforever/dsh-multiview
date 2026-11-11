@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.41';
+const MV_PLUGIN_VERSION = '0.1.42';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -750,6 +750,19 @@ function mvReset() {
         }));
     try {
         window.localStorage.removeItem(MV_STORAGE_KEY);
+    } catch (error) {}
+}
+function mvClearArchived() {
+    try {
+        const kept = mvReconcileTree(mvState.layout, (sessionId)=>mvIsArchived(sessionId) ? null : sessionId);
+        if (kept === mvState.layout) return;
+        const leaves = mvLeaves(kept);
+        const focused = leaves.some((leaf)=>leaf.id === mvState.focused) ? mvState.focused : leaves[0].id;
+        mvCommit((current)=>({
+                ...current,
+                layout: kept,
+                focused
+            }));
     } catch (error) {}
 }
 function mvReconcile() {
@@ -2374,6 +2387,7 @@ function MultiviewStage(props) {
     const openedRef = React.useRef(false);
     React.useEffect(()=>{
         mvReconcile();
+        mvClearArchived();
         if (openedRef.current) return;
         try {
             const snapshot = PTX.sessions.list.getSnapshot();
@@ -2786,6 +2800,8 @@ function apply(ctx) {
             swap: (a, b)=>mvSwapLeaves(a, b),
             remove: (leafId)=>mvRemovePane(leafId),
             reset: ()=>mvReset(),
+            reconcile: ()=>mvReconcile(),
+            clearArchived: ()=>mvClearArchived(),
             neighbour: (leafId, delta)=>mvNeighbour(mvGetState().layout, leafId, delta),
             mainKeys: ()=>(PTX.slots.entries('main') || []).map((entry)=>entry.options.key),
             panelInfo: ()=>PTX.layout.panelInfo.getSnapshot(),

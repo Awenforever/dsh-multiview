@@ -243,6 +243,8 @@ function apply(ctx) {
       swap: (a, b) => mvSwapLeaves(a, b),
       remove: (leafId) => mvRemovePane(leafId),
       reset: () => mvReset(),
+      reconcile: () => mvReconcile(),
+      clearArchived: () => mvClearArchived(),
       neighbour: (leafId, delta) => mvNeighbour(mvGetState().layout, leafId, delta),
       mainKeys: () => (PTX.slots.entries('main') || []).map((entry) => entry.options.key),
       panelInfo: () => PTX.layout.panelInfo.getSnapshot(),
