@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.29';
+const MV_PLUGIN_VERSION = '0.1.30';
 const MV_ZH = {
     panel: '分屏',
     title: '分屏',
@@ -42,6 +42,7 @@ const MV_ZH = {
     viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
     viewsCurrent: '当前分屏',
     viewsDelete: '删除视图',
+    viewsRename: '重命名这套布局',
     viewsHint: '点击恢复这个分屏',
     updateCheck: '检查更新',
     updateChecking: '正在检查更新…',
@@ -108,6 +109,7 @@ const MV_EN = {
     viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
     viewsCurrent: 'Current split',
     viewsDelete: 'Delete view',
+    viewsRename: 'Rename this split',
     viewsHint: 'Restore this split',
     updateCheck: 'Check for updates',
     updateChecking: 'Checking for updates…',
@@ -554,7 +556,7 @@ function mvSyncView(next) {
             views: views.map((view)=>view.id === current.id ? {
                     ...view,
                     layout: next.layout,
-                    name: mvViewName(next.layout)
+                    name: typeof view.customName === 'string' ? view.customName : mvViewName(next.layout)
                 } : view)
         };
     }
@@ -836,6 +838,21 @@ function mvPutInPane(sessionId) {
     if (fallback === undefined) return null;
     mvBind(fallback.id, sessionId);
     return fallback.id;
+}
+function mvRenameView(viewId, name) {
+    const trimmed = String(name ?? '').trim().slice(0, 60);
+    mvCommit((current)=>({
+            ...current,
+            views: (current.views ?? []).map((view)=>view.id === viewId ? trimmed === '' ? {
+                    ...view,
+                    name: mvViewName(view.layout),
+                    customName: undefined
+                } : {
+                    ...view,
+                    name: trimmed,
+                    customName: trimmed
+                } : view)
+        }));
 }
 function mvApplyView(viewId) {
     mvCommit((current)=>{
@@ -1262,6 +1279,8 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-views-row[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);box-shadow:inset 2px 0 0 var(--dsw-alias-state-business-primary)}
 .mv-views-name{flex:1;min-width:0;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .mv-views-name:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.mv-views-input{flex:1;min-width:0;height:26px;margin-right:4px;padding:0 8px;border:1px solid var(--dsw-alias-border-l4);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px}
+.mv-views-input:focus{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:0}
 .mv-views-del{flex:none;width:22px;height:22px;margin-right:4px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
 .mv-views-del:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .mv-update{position:relative}
@@ -2106,6 +2125,69 @@ function MvRowMenuAction(props) {
         path: MV_ICON.split
     }), h('span', null, T('rowActionMenu')));
 }
+function MvViewsRow(props) {
+    const { view, active, onApply, onDelete } = props;
+    const [editing, setEditing] = React.useState(false);
+    const [draft, setDraft] = React.useState(view.name);
+    const open = ()=>{
+        setDraft(typeof view.customName === 'string' ? view.customName : view.name);
+        setEditing(true);
+    };
+    const commit = ()=>{
+        mvRenameView(view.id, draft);
+        setEditing(false);
+    };
+    if (editing) {
+        return h('div', {
+            className: 'mv-views-row',
+            'data-active': active ? 'true' : 'false'
+        }, h('input', {
+            className: 'mv-views-input',
+            value: draft,
+            autoFocus: true,
+            'aria-label': T('viewsRename'),
+            onChange: (event)=>setDraft(event.target.value),
+            onBlur: commit,
+            onKeyDown: (event)=>{
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commit();
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setEditing(false);
+                }
+            }
+        }));
+    }
+    return h('div', {
+        className: 'mv-views-row',
+        'data-active': active ? 'true' : 'false',
+        'aria-current': active ? 'true' : undefined
+    }, h('button', {
+        type: 'button',
+        className: 'mv-views-name',
+        title: T('viewsHint'),
+        onClick: onApply
+    }, view.name), h('button', {
+        type: 'button',
+        className: 'mv-views-del',
+        title: T('viewsRename'),
+        'aria-label': T('viewsRename'),
+        onClick: (event)=>{
+            event.stopPropagation();
+            open();
+        }
+    }, '✎'), h('button', {
+        type: 'button',
+        className: 'mv-views-del',
+        title: T('viewsDelete'),
+        'aria-label': T('viewsDelete'),
+        onClick: (event)=>{
+            event.stopPropagation();
+            onDelete();
+        }
+    }, '✕'));
+}
 function MvViewsButton(props) {
     const { views, currentId } = props;
     const [open, setOpen] = React.useState(false);
@@ -2151,29 +2233,16 @@ function MvViewsButton(props) {
         'aria-label': T('views')
     }, views.length === 0 ? h('div', {
         className: 'mv-views-empty'
-    }, T('viewsEmpty')) : views.map((view)=>h('div', {
+    }, T('viewsEmpty')) : views.map((view)=>h(MvViewsRow, {
             key: view.id,
-            className: 'mv-views-row',
-            'data-active': view.id === currentId ? 'true' : 'false',
-            'aria-current': view.id === currentId ? 'true' : undefined
-        }, h('button', {
-            type: 'button',
-            className: 'mv-views-name',
-            title: T('viewsHint'),
-            onClick: ()=>{
+            view,
+            active: view.id === currentId,
+            onApply: ()=>{
                 mvApplyView(view.id);
                 setOpen(false);
-            }
-        }, view.name), h('button', {
-            type: 'button',
-            className: 'mv-views-del',
-            title: T('viewsDelete'),
-            'aria-label': T('viewsDelete'),
-            onClick: (event)=>{
-                event.stopPropagation();
-                mvDeleteView(view.id);
-            }
-        }, '✕')))) : null);
+            },
+            onDelete: ()=>mvDeleteView(view.id)
+        }))) : null);
 }
 function MultiviewStage(props) {
     const { renderSlot, SessionProvider, useSessions, useSessionStatus } = props;

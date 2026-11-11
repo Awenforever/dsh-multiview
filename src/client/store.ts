@@ -111,7 +111,14 @@ function mvSyncView(next: any): any {
     return {
       ...next,
       views: views.map((view) =>
-        view.id === current.id ? { ...view, layout: next.layout, name: mvViewName(next.layout) } : view,
+        view.id === current.id
+          ? {
+              ...view,
+              layout: next.layout,
+              /* A name the user typed outranks the generated one. */
+              name: typeof view.customName === 'string' ? view.customName : mvViewName(next.layout),
+            }
+          : view,
       ),
     }
   }
@@ -380,8 +387,26 @@ function mvPutInPane(sessionId: string): string | null {
   return fallback.id
 }
 
-/** Restore a saved split by view id. */
-function mvApplyView(viewId: string): void {
+/**
+ * Name a saved split. An empty name hands it back to the generated title.
+ * @param viewId - the saved split to rename.
+ * @param name - user-chosen name, trimmed; empty clears the custom name.
+ */
+function mvRenameView(viewId: string, name: string): void {
+  const trimmed = String(name ?? '').trim().slice(0, 60)
+  mvCommit((current) => ({
+    ...current,
+    views: (current.views ?? []).map((view) =>
+      view.id === viewId
+        ? trimmed === ''
+          ? { ...view, name: mvViewName(view.layout), customName: undefined }
+          : { ...view, name: trimmed, customName: trimmed }
+        : view,
+    ),
+  }))
+}
+
+/** Restore a saved split by view id. */function mvApplyView(viewId: string): void {
   mvCommit((current) => {
     const view = current.views.find((item) => item.id === viewId)
     if (view === undefined) return current

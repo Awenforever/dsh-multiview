@@ -10,7 +10,7 @@ const MV_PANE_SLOT = 'multiview.pane'
 /** Storage key for the persisted stage; versioned so a future shape can migrate. */
 const MV_STORAGE_KEY = 'dsh.multiview.v1'
 /** This build's version; `scripts/check.mjs` asserts it equals package.json. */
-const MV_PLUGIN_VERSION = '0.1.29'
+const MV_PLUGIN_VERSION = '0.1.30'
 
 const MV_ZH = {
   panel: '分屏',
@@ -42,6 +42,7 @@ const MV_ZH = {
   viewsEmpty: '还没有保存的视图。绑定两个以上会话后会自动记住。',
   viewsCurrent: '当前分屏',
   viewsDelete: '删除视图',
+  viewsRename: '重命名这套布局',
   viewsHint: '点击恢复这个分屏',
   updateCheck: '检查更新',
   updateChecking: '正在检查更新…',
@@ -109,6 +110,7 @@ const MV_EN = {
   viewsEmpty: 'No saved views yet. A split with two or more sessions is remembered automatically.',
   viewsCurrent: 'Current split',
   viewsDelete: 'Delete view',
+  viewsRename: 'Rename this split',
   viewsHint: 'Restore this split',
   updateCheck: 'Check for updates',
   updateChecking: 'Checking for updates…',

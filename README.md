@@ -34,7 +34,7 @@ A "Split" icon appears in the left panel list; click it to turn the central colu
 | Jump to what needs you | The pane header's status dot is a button (a pane that is waiting for an answer or finished unread); `Mod+Alt+J` cycles to the next such pane |
 | Open in the native view | The ↗ button: hands the session back to the real conversation (the right sidebar's file preview and diff review only exist there) |
 | Remove a pane | The ✕ button; a bound pane goes **back to the session list** (the split keeps its shape), an empty pane is what ✕ actually removes |
-| Views | Bar → Views: a split with 2+ sessions is remembered automatically; click to restore, ✕ to delete |
+| Views | Bar → Views: a split with 2+ sessions is remembered automatically; click to restore, ✎ to rename it (a name you type survives later layout edits), ✕ to delete |
 | Check for updates | Refresh icon at the right of the bar: checked every 24h, red dot on a new release, confirm to update |
 
 Shortcuts (module defaults; rebind in **Settings → Shortcuts**):

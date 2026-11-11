@@ -730,6 +730,95 @@ function MvRowMenuAction(props) {
   )
 }
 
+/**
+ * One saved split: apply it, rename it in place, or delete it.
+ *
+ * Renaming matters because the automatic name is derived from session titles, and Long
+ * Session Titles About Something. make the list hard to scan.
+ */
+function MvViewsRow(props) {
+  const { view, active, onApply, onDelete } = props
+  const [editing, setEditing] = React.useState(false)
+  const [draft, setDraft] = React.useState(view.name)
+  const open = () => {
+    setDraft(typeof view.customName === 'string' ? view.customName : view.name)
+    setEditing(true)
+  }
+  const commit = () => {
+    mvRenameView(view.id, draft)
+    setEditing(false)
+  }
+  if (editing) {
+    return h(
+      'div',
+      { className: 'mv-views-row', 'data-active': active ? 'true' : 'false' },
+      h('input', {
+        className: 'mv-views-input',
+        value: draft,
+        autoFocus: true,
+        'aria-label': T('viewsRename'),
+        onChange: (event) => setDraft(event.target.value),
+        onBlur: commit,
+        onKeyDown: (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            setEditing(false)
+          }
+        },
+      }),
+    )
+  }
+  return h(
+    'div',
+    {
+      className: 'mv-views-row',
+      'data-active': active ? 'true' : 'false',
+      'aria-current': active ? 'true' : undefined,
+    },
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'mv-views-name',
+        title: T('viewsHint'),
+        onClick: onApply,
+      },
+      view.name,
+    ),
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'mv-views-del',
+        title: T('viewsRename'),
+        'aria-label': T('viewsRename'),
+        onClick: (event) => {
+          event.stopPropagation()
+          open()
+        },
+      },
+      '✎',
+    ),
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'mv-views-del',
+        title: T('viewsDelete'),
+        'aria-label': T('viewsDelete'),
+        onClick: (event) => {
+          event.stopPropagation()
+          onDelete()
+        },
+      },
+      '✕',
+    ),
+  )
+}
+
 /** Saved splits: auto-captured whenever two or more panes are bound. */
 function MvViewsButton(props) {
   const { views, currentId } = props
@@ -780,37 +869,16 @@ function MvViewsButton(props) {
           views.length === 0
             ? h('div', { className: 'mv-views-empty' }, T('viewsEmpty'))
             : views.map((view) =>
-                h(
-                  'div',
-                  { key: view.id, className: 'mv-views-row', 'data-active': view.id === currentId ? 'true' : 'false', 'aria-current': view.id === currentId ? 'true' : undefined },
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'mv-views-name',
-                      title: T('viewsHint'),
-                      onClick: () => {
-                        mvApplyView(view.id)
-                        setOpen(false)
-                      },
-                    },
-                    view.name,
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'mv-views-del',
-                      title: T('viewsDelete'),
-                      'aria-label': T('viewsDelete'),
-                      onClick: (event: any) => {
-                        event.stopPropagation()
-                        mvDeleteView(view.id)
-                      },
-                    },
-                    '✕',
-                  ),
-                ),
+                h(MvViewsRow, {
+                  key: view.id,
+                  view,
+                  active: view.id === currentId,
+                  onApply: () => {
+                    mvApplyView(view.id)
+                    setOpen(false)
+                  },
+                  onDelete: () => mvDeleteView(view.id),
+                }),
               ),
         )
       : null,
