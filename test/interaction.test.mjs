@@ -333,3 +333,78 @@ test('renaming a saved split through the popover writes a custom name', () => {
   assert.equal(saved.name, '盯盘 A 组', 'the typed name is stored')
   assert.equal(byClass(tree, 'mv-views-input').length, 0, 'committing closes the inline input')
 })
+
+test('the empty-pane picker filters as you type and binds on click', () => {
+  const { stage, hook } = bootHost()
+  const harness = createHarness()
+  const props = {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(LIST),
+    useSessionStatus: (selector) => selector(new Map()),
+  }
+
+  /* Two empty panes, so two pickers — every count below is scoped to one of them. */
+  hook.bind('p1', null)
+  hook.bind('p2', null)
+  let tree = harness.render(stage, props)
+  assert.equal(byClass(tree, 'mv-picker').length, 2, 'each empty pane offers a picker')
+
+  const firstPicker = () => byClass(tree, 'mv-picker')[0]
+  const itemsIn = (picker) => byClass(picker, 'mv-picker-item')
+  assert.equal(itemsIn(firstPicker()).length, SESSION_IDS.length, 'every pickable Session is listed in one picker')
+
+  /* Typing filters that picker only. */
+  const searchIn = (picker) => byClass(picker, 'mv-picker-search')[0]
+  searchIn(firstPicker()).props.onChange({ target: { value: 's1' } })
+  tree = harness.render(stage, props)
+  assert.equal(itemsIn(firstPicker()).length, 1, 'typing narrows the list')
+
+  /* A filter that matches nothing explains itself with the no-match copy. */
+  searchIn(firstPicker()).props.onChange({ target: { value: 'zzz' } })
+  tree = harness.render(stage, props)
+  const emptyNote = byClass(firstPicker(), 'mv-picker-empty')[0]
+  assert.ok(emptyNote !== undefined, 'a filter with no match explains itself')
+  assert.equal(textOf(emptyNote), 'pickEmpty', 'the no-match copy is used, not the first-run copy')
+
+  /* Clear, then bind by clicking a row. */
+  searchIn(firstPicker()).props.onChange({ target: { value: '' } })
+  tree = harness.render(stage, props)
+  const firstItem = itemsIn(firstPicker())[0]
+  assert.ok(firstItem !== undefined, 'rows are clickable')
+  firstItem.props.onClick(fakeEvent())
+  tree = harness.render(stage, props)
+
+  const leaves = []
+  const walk = (node) => {
+    if (node == null) return
+    if (node.kind === 'leaf') { leaves.push(node); return }
+    walk(node.a)
+    walk(node.b)
+  }
+  walk(hook.state().layout)
+  assert.equal(leaves.filter((leaf) => leaf.sessionId !== null).length, 1, 'clicking a row binds exactly one pane')
+  assert.equal(byClass(tree, 'mv-picker').length, 1, 'the bound pane stops showing a picker')
+})
+
+test('the update dialog opens as a modal', () => {
+  const { stage } = bootHost()
+  const harness = createHarness()
+  const props = {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(LIST),
+    useSessionStatus: (selector) => selector(new Map()),
+  }
+
+  let tree = harness.render(stage, props)
+  const button = byClass(tree, 'mv-update')[0]
+  assert.ok(button !== undefined, 'the update control exists')
+  assert.equal(button.props['aria-haspopup'], 'dialog', 'it announces a dialog')
+
+  button.props.onClick(fakeEvent())
+  tree = harness.render(stage, props)
+  const dialogs = collect(tree, (node) => node.props && node.props.role === 'dialog')
+  assert.equal(dialogs.length, 1, 'one click opens a single dialog')
+  assert.equal(dialogs[0].props['aria-modal'], 'true', 'the dialog declares itself modal')
+})
