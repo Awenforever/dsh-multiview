@@ -814,3 +814,52 @@ test('archiving while the split is open drops the Session, and nothing else move
   bare.clearArchived()
   assert.deepEqual(leavesOf(bare).map((leaf) => leaf.sessionId), ['s1', 's2'], 'no archived set means no clearing')
 })
+
+test('applying a saved split prunes Sessions the host no longer has', () => {
+  const layout = (first, second) => ({
+    kind: 'split', id: 's1', dir: 'row', ratio: 0.5,
+    a: { kind: 'leaf', id: 'p1', sessionId: first },
+    b: { kind: 'leaf', id: 'p2', sessionId: second },
+  })
+  const seed = {
+    version: 3,
+    layout: layout('s1', null),
+    focused: 'p1',
+    preset: 2,
+    seeded: true,
+    currentViewId: null,
+    views: [
+      { id: 'stale', name: 'Old split', layout: layout('s1', 'session-deleted'), savedAt: 1 },
+      { id: 'archived', name: 'Archived split', layout: layout('s1', 's2'), savedAt: 2 },
+    ],
+  }
+
+  /* s2 exists in the list but is archived; session-deleted does not exist at all. */
+  const gone = bootWithHook(seed, undefined, {
+    sessionsList: () => ({ phase: 'ready', ids: ['s1', 's2'], byId: { s1: { id: 's1', title: 'Alpha', blank: false }, s2: { id: 's2', title: 'Beta', blank: false } } }),
+  }).hook
+  gone.applyView('stale')
+  const afterGone = leavesOf(gone)
+  assert.deepEqual(afterGone.map((leaf) => leaf.sessionId), ['s1', null], 'a deleted Session is not bound')
+  assert.equal(afterGone.length, 2, 'the shape of the saved split is kept')
+  assert.equal(gone.state().preset, 2, 'the pane count follows the restored split')
+
+  /* The stored entry heals itself, because the pruned layout becomes the current view. */
+  const healed = gone.state().views.find((view) => view.id === 'stale')
+  assert.ok(healed !== undefined, 'the saved entry still exists')
+  assert.equal(leavesOf({ state: () => ({ layout: healed.layout }) })[1].sessionId, null, 'the saved entry no longer names the dead Session')
+
+  const archived = bootWithHook(seed, undefined, {
+    sessionsList: () => ({ phase: 'ready', ids: ['s1', 's2'], byId: { s1: { id: 's1', title: 'Alpha', blank: false }, s2: { id: 's2', title: 'Beta', blank: false } } }),
+    workspaces: { groups: [], workspaceId: 'default', archivedSessionIds: ['s2'] },
+  }).hook
+  archived.applyView('archived')
+  assert.deepEqual(leavesOf(archived).map((leaf) => leaf.sessionId), ['s1', null], 'an archived Session is not bound')
+
+  /* While the list is still loading there is no authority to prune against, so keep the ids. */
+  const loading = bootWithHook(seed, undefined, {
+    sessionsList: () => ({ phase: 'loading', ids: [], byId: {} }),
+  }).hook
+  loading.applyView('stale')
+  assert.deepEqual(leavesOf(loading).map((leaf) => leaf.sessionId), ['s1', 'session-deleted'], 'nothing is pruned before the list is ready')
+})

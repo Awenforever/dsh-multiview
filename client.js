@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.42';
+const MV_PLUGIN_VERSION = '0.1.43';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -970,18 +970,38 @@ function mvRenameView(viewId, name) {
                 } : view)
         }));
 }
+function mvLiveLayout(layout) {
+    try {
+        const list = PTX.sessions.list.getSnapshot();
+        if (list === undefined || list === null || list.phase !== 'ready') return layout;
+        return mvReconcileTree(layout, (sessionId)=>{
+            const row = list.byId[sessionId];
+            if (row === undefined || row.blank === true) return null;
+            if (mvIsArchived(sessionId)) return null;
+            return sessionId;
+        });
+    } catch (error) {
+        return layout;
+    }
+}
 function mvApplyView(viewId) {
     mvCommit((current)=>{
         const view = current.views.find((item)=>item.id === viewId);
         if (view === undefined) return current;
-        const leaves = mvLeaves(view.layout);
+        const layout = mvLiveLayout(view.layout);
+        const leaves = mvLeaves(layout);
+        const worthy = mvViewWorthy(layout);
         return {
             ...current,
-            layout: view.layout,
+            layout,
             focused: leaves[0].id,
             preset: leaves.length,
             maximized: null,
-            currentViewId: view.id
+            currentViewId: worthy ? view.id : null,
+            views: current.views.map((item)=>item.id === view.id ? {
+                    ...item,
+                    layout
+                } : item)
         };
     });
 }

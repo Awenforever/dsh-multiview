@@ -496,18 +496,53 @@ function mvRenameView(viewId: string, name: string): void {
   }))
 }
 
-/** Restore a saved split by view id. */function mvApplyView(viewId: string): void {
+/**
+ * Drop bindings whose Session the host no longer has, keeping pane positions.
+ *
+ * Saved splits store Session ids forever, so an old split can name Sessions that were deleted
+ * or archived. Applying such a split used to bind panes to them — the pane then renders as
+ * unavailable, or the retain call fails. Pruning on apply keeps the shape and empties only the
+ * panes that cannot be restored; because the applied layout becomes the current view, the
+ * stored entry heals itself in the same step.
+ * @param layout - a split tree, typically from a saved view.
+ * @returns the same shape with dead bindings cleared (never removes panes).
+ */
+function mvLiveLayout(layout: any): any {
+  try {
+    const list = PTX.sessions.list.getSnapshot()
+    if (list === undefined || list === null || list.phase !== 'ready') return layout
+    return mvReconcileTree(layout, (sessionId) => {
+      const row = list.byId[sessionId]
+      if (row === undefined || row.blank === true) return null
+      if (mvIsArchived(sessionId)) return null
+      return sessionId
+    })
+  } catch (error) {
+    return layout
+  }
+}
+
+/** Restore a saved split by view id, pruning Sessions the host no longer has. */
+function mvApplyView(viewId: string): void {
   mvCommit((current) => {
     const view = current.views.find((item) => item.id === viewId)
     if (view === undefined) return current
-    const leaves = mvLeaves(view.layout)
+    const layout = mvLiveLayout(view.layout)
+    const leaves = mvLeaves(layout)
+    /* If pruning left fewer than two Sessions, the split cannot be a "current" arrangement any
+       more — but the saved entry is the user's artifact and must not vanish just because one of
+       its Sessions was archived. Apply the surviving shape and leave the library untouched. */
+    const worthy = mvViewWorthy(layout)
     return {
       ...current,
-      layout: view.layout,
+      layout,
       focused: leaves[0].id,
       preset: leaves.length,
       maximized: null,
-      currentViewId: view.id,
+      currentViewId: worthy ? view.id : null,
+      /* Keep the entry, but rewrite it to the shape that could actually be restored, so a
+         Session archived today does not linger in the saved split forever. */
+      views: current.views.map((item) => (item.id === view.id ? { ...item, layout } : item)),
     }
   })
 }
