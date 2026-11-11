@@ -237,6 +237,15 @@ if (zhKeys !== null && enKeys !== null) {
   ok(dialog !== null && dialog.includes('border-radius:var(--dsw-radius-panel)'), '.mv-dialog must use --dsw-radius-panel like the host dialog')
   ok(dialog !== null && dialog.includes('box-shadow:0 0 0 .5px'), '.mv-dialog must carry the elevation ring')
 
+  /* The host's type scale runs 10 / 11 / 12 / 13 / 14 / 16; anything smaller is unreadable and
+     foreign beside shipped UI. */
+  if (css !== null) {
+    const tiny = [...css[1].matchAll(/font-size:\s*([0-9.]+)px/g)]
+      .map((match) => Number(match[1]))
+      .filter((value) => value < 10)
+    ok(tiny.length === 0, `no text may be smaller than the host's 10px minimum (found ${tiny.join(', ')}px)`)
+  }
+
   notes.push(`${zhKeys.length} copy keys, zh/en parity ok`)
   notes.push(`${usedKeys.size} requested copy keys all declared`)
 
