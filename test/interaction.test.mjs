@@ -268,3 +268,45 @@ test('the picker says how many conversations it is hiding', () => {
   })
   assert.equal(byClass(smallTree, 'mv-picker-more').length, 0, 'a short list carries no notice')
 })
+
+test('the picker asks the host index when the filter is a phrase', async () => {
+  const list = makeSessions(['s1', 's2', 's3'])
+  const asked = []
+  const { stage, hook } = bootHost({
+    sessions: list,
+    search: (query) => {
+      asked.push(query)
+      return Promise.resolve({ ok: true, value: { items: [{ sessionId: 's3', snippet: 'the WAL discussion' }], hasMore: false } })
+    },
+  })
+  const harness = createHarness()
+  hook.bind('p1', null)
+  const props = {
+    renderSlot: () => null,
+    SessionProvider: ({ children }) => children,
+    useSessions: (selector) => selector(list),
+    useSessionStatus: (selector) => selector(new Map()),
+  }
+
+  let tree = harness.render(stage, props)
+  const firstPicker = () => byClass(tree, 'mv-picker')[0]
+  /* Two empty panes means two pickers; every count below is scoped to the first one. */
+  assert.equal(byClass(firstPicker(), 'mv-picker-item').length, 3, 'the unfiltered list shows every conversation')
+  assert.equal(asked.length, 0, 'no host query without a phrase')
+
+  /* A single character is not worth a host round trip. */
+  byClass(firstPicker(), 'mv-picker-search')[0].props.onChange({ target: { value: 'w' } })
+  tree = harness.render(stage, props)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.equal(asked.length, 0, 'one character stays local')
+
+  /* A phrase asks the index; its hit appears even though the title does not match. */
+  byClass(firstPicker(), 'mv-picker-search')[0].props.onChange({ target: { value: 'wal' } })
+  tree = harness.render(stage, props)
+  await new Promise((resolve) => setTimeout(resolve, 220))
+  tree = harness.render(stage, props)
+  assert.deepEqual(asked, ['wal'], 'the phrase is sent once, debounced')
+  const rows = byClass(firstPicker(), 'mv-picker-item')
+  assert.equal(rows.length, 1, 'only the content hit remains')
+  assert.equal(textOf(rows[0]), 'S3the WAL discussion', 'the hit carries its snippet')
+})

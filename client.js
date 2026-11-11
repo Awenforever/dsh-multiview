@@ -21,6 +21,7 @@ const MV_ZH = {
     pick: '选择会话',
     pickSearch: '搜索会话',
     pickEmpty: '没有匹配的会话',
+    pickSearching: '正在检索对话内容…',
     pickMore: '还有 {count} 个会话，输入关键词可继续筛选',
     pickOnStage: '已在分屏中',
     pickNone: '还没有会话，先在左侧新建一个',
@@ -94,6 +95,7 @@ const MV_EN = {
     pick: 'Pick a session',
     pickSearch: 'Search sessions',
     pickEmpty: 'No matching session',
+    pickSearching: 'Searching conversations…',
     pickMore: '{count} more conversations — type to narrow',
     pickOnStage: 'On this split',
     pickNone: 'No conversations yet — create one in the sidebar first',
@@ -598,6 +600,41 @@ function mvTrimViews(candidates, cap) {
         views: candidates.slice(1, cap + 1),
         keptNewcomer: false
     };
+}
+function mvMergeSearchRows(rows, hits, titleOf, cap) {
+    const seen = new Set();
+    const out = [];
+    for (const row of rows){
+        if (row === null || typeof row !== 'object' || row.kind !== undefined) {
+            out.push(row);
+            continue;
+        }
+        seen.add(row.id);
+        out.push(row);
+    }
+    for (const hit of Array.isArray(hits) ? hits : []){
+        const id = typeof hit?.sessionId === 'string' ? hit.sessionId : null;
+        if (id === null) continue;
+        const snippet = typeof hit?.snippet === 'string' ? hit.snippet : '';
+        if (seen.has(id)) {
+            const existing = out.find((row)=>row !== null && typeof row === 'object' && row.id === id);
+            if (existing !== undefined && existing.snippet === undefined) existing.snippet = snippet;
+            continue;
+        }
+        const title = titleOf(id);
+        if (title === null) continue;
+        seen.add(id);
+        out.push({
+            id,
+            title,
+            depth: 0,
+            owner: null,
+            onStage: false,
+            snippet,
+            fromContent: true
+        });
+    }
+    return out.slice(0, cap);
 }
 
 function mvInitialState() {
@@ -1508,6 +1545,7 @@ body:not([data-ds-dark-theme]) .mv-dot[data-state="waiting"],body:not([data-ds-d
 .mv-dialog-button--primary:disabled:hover{filter:none}
 .mv-dialog-button:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .mv-picker-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv-picker-snippet{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-size:11px;padding-left:8px}
 .mv-picker-owner{flex:none;max-width:45%;padding:0 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mv-picker-item[data-owned="true"]{opacity:0.45;cursor:not-allowed}
 .mv-picker-item[data-owned="true"]:hover{background:transparent}
@@ -1894,7 +1932,75 @@ function mvPickableRows(query, views = [], currentViewId = null, onStage = []) {
 function MvPanePicker(props) {
     const { onPick, views, currentViewId, onStage } = props;
     const [query, setQuery] = React.useState('');
-    const rows = mvPickableRows(query, views ?? [], currentViewId ?? null, onStage ?? []);
+    const [content, setContent] = React.useState({
+        query: '',
+        hits: [],
+        hasMore: false,
+        state: 'idle'
+    });
+    React.useEffect(()=>{
+        const text = String(query ?? '').trim();
+        const search = PTX !== null && typeof PTX.sessions?.search === 'function' ? PTX.sessions.search : null;
+        if (search === null || text.length < 2) {
+            setContent({
+                query: text,
+                hits: [],
+                hasMore: false,
+                state: 'idle'
+            });
+            return undefined;
+        }
+        let live = true;
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        setContent((current)=>({
+                ...current,
+                query: text,
+                state: 'searching'
+            }));
+        const timer = setTimeout(()=>{
+            Promise.resolve(search(text, controller === null ? undefined : controller.signal)).then((answer)=>{
+                if (!live) return;
+                const items = answer?.ok === true ? answer.value?.items : Array.isArray(answer?.items) ? answer.items : [];
+                setContent({
+                    query: text,
+                    hits: Array.isArray(items) ? items : [],
+                    hasMore: answer?.ok === true ? answer.value?.hasMore === true : answer?.hasMore === true,
+                    state: 'ready'
+                });
+            }).catch(()=>{
+                if (live) setContent({
+                    query: text,
+                    hits: [],
+                    hasMore: false,
+                    state: 'failed'
+                });
+            });
+        }, 160);
+        return ()=>{
+            live = false;
+            clearTimeout(timer);
+            if (controller !== null) controller.abort();
+        };
+    }, [
+        query
+    ]);
+    const titleRows = mvPickableRows(query, views ?? [], currentViewId ?? null, onStage ?? []);
+    const snapshot = (()=>{
+        try {
+            return PTX === null ? null : PTX.sessions.list.getSnapshot();
+        } catch (error) {
+            return null;
+        }
+    })();
+    const titleOf = (id)=>{
+        const row = snapshot === null ? undefined : snapshot.byId?.[id];
+        if (row === undefined || row === null) return null;
+        if (row.blank === true) return null;
+        return typeof row.title === 'string' && row.title !== '' ? row.title : id;
+    };
+    const usableHits = (content.hits ?? []).filter((hit)=>titleOf(hit?.sessionId) !== null);
+    const rows = usableHits.length === 0 ? titleRows : mvMergeSearchRows(titleRows, usableHits, titleOf, 240);
+    const searching = content.state === 'searching' && content.query === String(query ?? '').trim();
     return h('div', {
         className: 'mv-picker',
         'data-mv-picker': ''
@@ -1914,7 +2020,7 @@ function MvPanePicker(props) {
         className: 'mv-picker-list'
     }, rows.length === 0 ? h('div', {
         className: 'mv-picker-empty'
-    }, query.trim() === '' ? T('pickNone') : T('pickEmpty')) : rows.map((row)=>row.kind === 'group' ? h('div', {
+    }, searching ? T('pickSearching') : query.trim() === '' ? T('pickNone') : T('pickEmpty')) : rows.map((row)=>row.kind === 'group' ? h('div', {
             key: 'group-' + row.id,
             className: 'mv-picker-group',
             role: 'presentation'
@@ -1940,7 +2046,9 @@ function MvPanePicker(props) {
             className: 'mv-picker-title'
         }, row.title), row.owner === null || row.owner === undefined ? row.onStage === true ? h('span', {
             className: 'mv-picker-owner'
-        }, T('pickOnStage')) : null : h('span', {
+        }, T('pickOnStage')) : typeof row.snippet === 'string' && row.snippet !== '' ? h('span', {
+            className: 'mv-picker-snippet'
+        }, row.snippet) : null : h('span', {
             className: 'mv-picker-owner'
         }, row.owner)))));
 }

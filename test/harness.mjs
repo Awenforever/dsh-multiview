@@ -44,39 +44,54 @@ export const React = {
 }
 
 /* ---------- stateful hook runtime ---------- */
+const componentIds = new WeakMap()
+let nextComponentId = 1
+/** Stable identity for a function component. */
+function idFor(type) {
+  const existing = componentIds.get(type)
+  if (existing !== undefined) return existing
+  const assigned = nextComponentId++
+  componentIds.set(type, assigned)
+  return assigned
+}
+
+/* Set by expand()/renderOnce() so hooks know which instance is rendering. */
+let currentKey = 'root'
+
 export function createHarness() {
-  const slots = { state: [], refs: [] }
+  const slots = { state: new Map(), refs: new Map() }
   let cursor = 0
   let dirty = false
   let effects = []
+  const cleanups = []
 
   const hooks = {
     useState(initial) {
-      const index = cursor++
-      if (slots.state[index] === undefined) {
-        slots.state[index] = typeof initial === 'function' ? initial() : initial
-      }
+      const key = currentKey + ':' + String(cursor++)
+      if (!slots.state.has(key)) slots.state.set(key, typeof initial === 'function' ? initial() : initial)
       const set = (next) => {
-        const value = typeof next === 'function' ? next(slots.state[index]) : next
-        if (value === slots.state[index]) return
-        slots.state[index] = value
+        const current = slots.state.get(key)
+        const value = typeof next === 'function' ? next(current) : next
+        if (value === current) return
+        slots.state.set(key, value)
         dirty = true
       }
-      return [slots.state[index], set]
+      return [slots.state.get(key), set]
     },
     useReducer(_reducer, initial) {
-      const index = cursor++
-      if (slots.state[index] === undefined) slots.state[index] = initial
+      const key = currentKey + ':' + String(cursor++)
+      if (!slots.state.has(key)) slots.state.set(key, initial)
       const dispatch = (next) => {
-        slots.state[index] = typeof next === 'function' ? next(slots.state[index]) : next
+        const current = slots.state.get(key)
+        slots.state.set(key, typeof next === 'function' ? next(current) : next)
         dirty = true
       }
-      return [slots.state[index], dispatch]
+      return [slots.state.get(key), dispatch]
     },
     useRef(initial) {
-      const index = cursor++
-      if (slots.refs[index] === undefined) slots.refs[index] = { current: initial }
-      return slots.refs[index]
+      const key = currentKey + ':' + String(cursor++)
+      if (!slots.refs.has(key)) slots.refs.set(key, { current: initial })
+      return slots.refs.get(key)
     },
     useEffect(effect) {
       effects.push(effect)
@@ -110,23 +125,39 @@ export function createHarness() {
       saved[key] = React[key]
       React[key] = hooks[key]
     }
+    const savedKey = currentKey
+    currentKey = String(idFor(component)) + '@root'
     try {
       return expand(component(props))
     } finally {
+      currentKey = savedKey
       for (const key of Object.keys(saved)) React[key] = saved[key]
     }
   }
 
-  /** Render until the tree stops changing, running effects after each pass. */
+  /**
+   * Render until the tree stops changing, then start the final pass's effects.
+   *
+   * Effects of the last pass must run too: a debounced search or an interval is *registered* during
+   * that pass, and skipping it means the scheduled work never starts, which looks like a component
+   * that ignores its input.
+   */
   function render(component, props, maxPasses = 20) {
     let tree = renderOnce(component, props)
-    for (let pass = 0; pass < maxPasses && dirty; pass += 1) {
+    let pass = 0
+    while (dirty && pass < maxPasses) {
       const pending = effects
+      effects = []
       for (const effect of pending) {
         const cleanup = effect()
-        if (typeof cleanup === 'function') cleanup()
+        if (typeof cleanup === 'function') cleanups.push(cleanup)
       }
       tree = renderOnce(component, props)
+      pass += 1
+    }
+    for (const effect of effects) {
+      const cleanup = effect()
+      if (typeof cleanup === 'function') cleanups.push(cleanup)
     }
     return tree
   }
@@ -135,20 +166,27 @@ export function createHarness() {
 }
 
 /* ---------- tree helpers ---------- */
-export function expand(node, depth = 0) {
+export function expand(node, depth = 0, path = 'r') {
   if (node == null || depth > 60) return node
-  if (Array.isArray(node)) return node.map((child) => expand(child, depth))
+  if (Array.isArray(node)) return node.map((child, index) => expand(child, depth, path + '.' + String(index)))
   if (typeof node !== 'object') return node
   if (typeof node.type === 'function') {
     const children = node.children.length <= 1 ? node.children[0] : node.children
     const isClass = node.type.prototype && node.type.prototype.render !== undefined
-    if (isClass) {
-      const instance = new node.type({ ...node.props, children })
-      return expand(instance.render(), depth + 1)
+    const saved = currentKey
+    /* The path makes two instances of one component distinct; the id keeps components apart. */
+    currentKey = String(idFor(node.type)) + '@' + path
+    try {
+      if (isClass) {
+        const instance = new node.type({ ...node.props, children })
+        return expand(instance.render(), depth + 1, path)
+      }
+      return expand(node.type({ ...node.props, children }), depth + 1, path)
+    } finally {
+      currentKey = saved
     }
-    return expand(node.type({ ...node.props, children }), depth + 1)
   }
-  return { ...node, children: (node.children ?? []).map((child) => expand(child, depth)) }
+  return { ...node, children: (node.children ?? []).map((child, index) => expand(child, depth, path + '.' + String(index))) }
 }
 
 export function collect(node, predicate, out = []) {
@@ -235,6 +273,10 @@ export function bootHost(options = {}) {
     location: { hostname: 'localhost', protocol: 'http:', search: '', href: 'http://localhost/' },
     navigator: { userAgent: 'node', platform: 'linux' },
   }
+  /* The bundle reads storage through `window`, so the fake window has to carry the same objects. */
+  window.localStorage = localStorage
+  window.document = document
+  window.window = window
   Object.assign(globalThis, { window, document, localStorage, location: window.location })
 
   const registered = []
@@ -256,6 +298,8 @@ export function bootHost(options = {}) {
       list: { getSnapshot: () => list },
       retain: () => ({ ready: Promise.resolve(), release: () => {} }),
       useList: (selector) => selector(list),
+      /* Content search: the happy path by default; a test can override it through options.search. */
+      search: options.search ?? (() => Promise.resolve({ ok: true, value: { items: [], hasMore: false } })),
     },
     workspaces: {
       list: { getSnapshot: () => ({ groups: [], workspaceId: 'default', archivedSessionIds: archived }) },
@@ -270,9 +314,14 @@ export function bootHost(options = {}) {
   }
 
   let loaded = null
-  globalThis.__ModuleLoader__ = { load: (spec) => { loaded = spec } }
+  const loader = { load: (spec) => { loaded = spec } }
+  /* The bundle reads `window` for listeners and for the loader, so it must receive the fake window
+     rather than globalThis: Node's globalThis has no addEventListener, and any effect that listens
+     would throw only once effects actually run. */
+  window.__ModuleLoader__ = loader
+  globalThis.__ModuleLoader__ = loader
   const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-  new Function('window', 'document', 'localStorage', source)(globalThis, document, localStorage)
+  new Function('window', 'document', 'localStorage', source)(window, document, localStorage)
   const module = loaded.factory((name) => {
     if (name === 'react') return React
     throw new Error('unexpected require: ' + name)
@@ -284,7 +333,7 @@ export function bootHost(options = {}) {
   return {
     stage: main === undefined ? undefined : main.component,
     icon: icon === undefined ? undefined : icon.component,
-    hook: globalThis.__mvDebug,
+    hook: window.__mvDebug ?? globalThis.__mvDebug,
     shortcuts: registered.shortcuts,
     context,
   }

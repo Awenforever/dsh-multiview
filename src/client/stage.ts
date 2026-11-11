@@ -186,7 +186,60 @@ function mvPickableRows(
 function MvPanePicker(props) {
   const { onPick, views, currentViewId, onStage } = props
   const [query, setQuery] = React.useState('')
-  const rows = mvPickableRows(query, views ?? [], currentViewId ?? null, onStage ?? [])
+  /* Content hits arrive asynchronously; `state` lets the list say "searching" without a spinner. */
+  const [content, setContent] = React.useState<any>({ query: '', hits: [], hasMore: false, state: 'idle' })
+  React.useEffect(() => {
+    const text = String(query ?? '').trim()
+    const search = PTX !== null && typeof PTX.sessions?.search === 'function' ? PTX.sessions.search : null
+    if (search === null || text.length < 2) {
+      setContent({ query: text, hits: [], hasMore: false, state: 'idle' })
+      return undefined
+    }
+    let live = true
+    const controller = typeof AbortController === 'function' ? new AbortController() : null
+    setContent((current) => ({ ...current, query: text, state: 'searching' }))
+    /* Debounced: a keystroke should not start a host request per character. */
+    const timer = setTimeout(() => {
+      Promise.resolve(search(text, controller === null ? undefined : controller.signal))
+        .then((answer) => {
+          if (!live) return
+          const items = answer?.ok === true ? answer.value?.items : Array.isArray(answer?.items) ? answer.items : []
+          setContent({
+            query: text,
+            hits: Array.isArray(items) ? items : [],
+            hasMore: answer?.ok === true ? answer.value?.hasMore === true : answer?.hasMore === true,
+            state: 'ready',
+          })
+        })
+        .catch(() => {
+          if (live) setContent({ query: text, hits: [], hasMore: false, state: 'failed' })
+        })
+    }, 160)
+    return () => {
+      live = false
+      clearTimeout(timer)
+      if (controller !== null) controller.abort()
+    }
+  }, [query])
+  const titleRows = mvPickableRows(query, views ?? [], currentViewId ?? null, onStage ?? [])
+  /* Only hits for sessions this host still lists: a snippet from an archived or deleted session
+     cannot be opened from here. */
+  const snapshot = (() => {
+    try {
+      return PTX === null ? null : PTX.sessions.list.getSnapshot()
+    } catch (error) {
+      return null
+    }
+  })()
+  const titleOf = (id: string): string | null => {
+    const row = snapshot === null ? undefined : snapshot.byId?.[id]
+    if (row === undefined || row === null) return null
+    if (row.blank === true) return null
+    return typeof row.title === 'string' && row.title !== '' ? row.title : id
+  }
+  const usableHits = (content.hits ?? []).filter((hit: any) => titleOf(hit?.sessionId) !== null)
+  const rows = usableHits.length === 0 ? titleRows : mvMergeSearchRows(titleRows, usableHits, titleOf, 240)
+  const searching = content.state === 'searching' && content.query === String(query ?? '').trim()
   return h(
     'div',
     { className: 'mv-picker', 'data-mv-picker': '' },
@@ -213,7 +266,11 @@ function MvPanePicker(props) {
             /* Two different situations, two different sentences: a filter that matches nothing
                versus a host where no conversation exists yet. "No matches" is misleading for a
                first run, where there is nothing to match in the first place. */
-            query.trim() === '' ? T('pickNone') : T('pickEmpty'),
+            searching
+              ? T('pickSearching')
+              : query.trim() === ''
+              ? T('pickNone')
+              : T('pickEmpty'),
           )
         : rows.map((row) =>
             row.kind === 'group'
@@ -250,6 +307,8 @@ function MvPanePicker(props) {
                   row.owner === null || row.owner === undefined
                     ? row.onStage === true
                       ? h('span', { className: 'mv-picker-owner' }, T('pickOnStage'))
+                      : typeof row.snippet === 'string' && row.snippet !== ''
+                      ? h('span', { className: 'mv-picker-snippet' }, row.snippet)
                       : null
                     : h('span', { className: 'mv-picker-owner' }, row.owner),
                 ),

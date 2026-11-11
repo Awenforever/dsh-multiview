@@ -484,3 +484,47 @@ export function mvTrimViews<T extends { id: string; customName?: string }>(
      It is index 0, so the library is the slice that skips it. */
   return { views: candidates.slice(1, cap + 1), keptNewcomer: false }
 }
+
+/**
+ * Merge host content hits into the title-matched rows.
+ *
+ * Title matches keep their order and identity; a content hit that is already listed only gains its
+ * snippet, and one that is not listed is appended after them. Everything stays one list, because the
+ * picker can only offer one set of rows.
+ * @param rows - rows already matched by title, in display order.
+ * @param hits - host search hits, `{ sessionId, snippet }`.
+ * @param titleOf - resolves a session id to its current title, or null when unavailable.
+ * @param cap - maximum number of rows to return.
+ */
+export function mvMergeSearchRows(
+  rows: any[],
+  hits: any[],
+  titleOf: (id: string) => string | null,
+  cap: number,
+): any[] {
+  const seen = new Set<string>()
+  const out: any[] = []
+  for (const row of rows) {
+    if (row === null || typeof row !== 'object' || row.kind !== undefined) {
+      out.push(row)
+      continue
+    }
+    seen.add(row.id)
+    out.push(row)
+  }
+  for (const hit of Array.isArray(hits) ? hits : []) {
+    const id = typeof hit?.sessionId === 'string' ? hit.sessionId : null
+    if (id === null) continue
+    const snippet = typeof hit?.snippet === 'string' ? hit.snippet : ''
+    if (seen.has(id)) {
+      const existing = out.find((row) => row !== null && typeof row === 'object' && row.id === id)
+      if (existing !== undefined && existing.snippet === undefined) existing.snippet = snippet
+      continue
+    }
+    const title = titleOf(id)
+    if (title === null) continue
+    seen.add(id)
+    out.push({ id, title, depth: 0, owner: null, onStage: false, snippet, fromContent: true })
+  }
+  return out.slice(0, cap)
+}

@@ -21,6 +21,7 @@ import {
   mvKeyCap,
   mvShortcutHint,
   mvTrimViews,
+  mvMergeSearchRows,
   mvNextAttentionPane,
   mvNeedsAttention,
   mvSessionSet,
@@ -355,4 +356,26 @@ test('the saved-split library evicts an auto-named entry before a hand-named one
   assert.equal(allNamed.keptNewcomer, false, 'the caller learns the newcomer did not fit')
   assert.ok(!allNamed.views.some((view) => view.id === 'new'), 'no named entry is sacrificed')
   assert.equal(allNamed.views.length, 12, 'the library keeps its size')
+})
+
+test('content hits fill in behind title matches without duplicating them', () => {
+  const titles = new Map([['s1', 'Alpha'], ['s2', 'Beta'], ['s3', 'Gamma']])
+  const titleOf = (id) => titles.get(id) ?? null
+  const rows = [{ id: 's1', title: 'Alpha', depth: 0, owner: null, onStage: false }]
+
+  const merged = mvMergeSearchRows(rows, [
+    { sessionId: 's1', snippet: 'we discussed WAL' },
+    { sessionId: 's3', snippet: 'checkpoint tuning' },
+    { sessionId: 'gone', snippet: 'no longer listed' },
+  ], titleOf, 240)
+
+  assert.deepEqual(merged.map((row) => row.id), ['s1', 's3'], 'title matches stay first, hits follow')
+  assert.equal(merged[0].snippet, 'we discussed WAL', 'an existing row gains its snippet')
+  assert.equal(merged[0].title, 'Alpha', 'the title stays authoritative')
+  assert.equal(merged[1].fromContent, true, 'a hit-only row is marked as such')
+  assert.ok(!merged.some((row) => row.id === 'gone'), 'a hit for an unavailable session is dropped')
+
+  /* The cap still applies after merging. */
+  const many = mvMergeSearchRows([], Array.from({ length: 5 }, (_, index) => ({ sessionId: 'h' + index, snippet: 'x' })), (id) => id, 3)
+  assert.equal(many.length, 3, 'the merged list respects the cap')
 })
