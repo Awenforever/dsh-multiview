@@ -11,7 +11,7 @@ const NS = 'multiview';
 const MV_PANEL_ID = 'multiview';
 const MV_PANE_SLOT = 'multiview.pane';
 const MV_STORAGE_KEY = 'dsh.multiview.v1';
-const MV_PLUGIN_VERSION = '0.1.100';
+const MV_PLUGIN_VERSION = '0.1.101';
 const MV_ZH = {
     panel: '分屏',
     panelAttention: '{count} 格需要你处理',
@@ -1044,17 +1044,26 @@ function mvReconcile() {
             }));
     }
 }
-function mvOpenForSession(sessionId) {
+function mvOpenForSession(sessionId, options) {
     if (sessionId === null) return;
+    const focusHolder = options?.focusHolder === true;
     mvCommit((current)=>{
         const owners = current.views.filter((view)=>mvViewKey(view.layout).split(',').includes(sessionId));
         const owner = owners[0];
         if (owner !== undefined) {
-            if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) return current;
+            if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) {
+                const currentHolder = mvLeaves(current.layout).find((leaf)=>leaf.sessionId === sessionId);
+                if (!focusHolder || currentHolder === undefined || current.focused === currentHolder.id) return current;
+                return {
+                    ...current,
+                    focused: currentHolder.id,
+                    maximized: null
+                };
+            }
             const ownerLeaves = mvLeaves(owner.layout);
             const stillThere = ownerLeaves.some((leaf)=>leaf.id === current.focused);
             const holder = ownerLeaves.find((leaf)=>leaf.sessionId === sessionId);
-            const focused = stillThere ? current.focused : holder !== undefined ? holder.id : ownerLeaves[0].id;
+            const focused = focusHolder && holder !== undefined ? holder.id : stillThere ? current.focused : holder !== undefined ? holder.id : ownerLeaves[0].id;
             return {
                 ...current,
                 layout: owner.layout,
@@ -1255,6 +1264,19 @@ function mvPutInPane(sessionId) {
     if (fallback === undefined) return null;
     mvBind(fallback.id, sessionId);
     return fallback.id;
+}
+let mvMountTarget = null;
+function mvSetMountTarget(sessionId) {
+    mvMountTarget = sessionId;
+}
+function mvTakeMountTarget() {
+    const target = mvMountTarget;
+    mvMountTarget = null;
+    return target;
+}
+function mvSessionInAnySplit(sessionId) {
+    if (mvViewKey(mvState.layout).split(',').includes(sessionId)) return true;
+    return (mvState.views ?? []).some((view)=>mvViewKey(view.layout).split(',').includes(sessionId));
 }
 function mvRenameView(viewId, name) {
     const trimmed = mvClip(String(name ?? '').trim(), 60, '');
@@ -2643,12 +2665,12 @@ function MvUpdateDialog(props) {
 function MvRowSplitAction(props) {
     const { sessionId } = props;
     const state = useMvState();
-    const holder = mvLeaves(state.layout).find((leaf)=>leaf.sessionId === sessionId);
-    const label = holder === undefined ? T('rowActionAdd') : T('rowActionFocus');
+    const inSplit = mvSessionInAnySplit(sessionId);
+    const label = inSplit ? T('rowActionFocus') : T('rowActionAdd');
     return h('button', {
         type: 'button',
         className: 'mv-row-action',
-        'data-active': holder === undefined ? 'false' : 'true',
+        'data-active': inSplit ? 'true' : 'false',
         title: label,
         'aria-label': label,
         onClick: ()=>mvOpenSessionInSplit(sessionId)
@@ -2817,9 +2839,12 @@ function MultiviewStage(props) {
         try {
             const snapshot = PTX.sessions.list.getSnapshot();
             if (snapshot.phase !== 'ready') return;
-            const current = snapshot.ids.find((id)=>(snapshot.byId[id]?.retainedBy?.mainView ?? 0) > 0);
+            const target = mvTakeMountTarget();
+            const current = target ?? snapshot.ids.find((id)=>(snapshot.byId[id]?.retainedBy?.mainView ?? 0) > 0);
             openedRef.current = true;
-            if (typeof current === 'string') mvOpenForSession(current);
+            if (typeof current === 'string') mvOpenForSession(current, {
+                focusHolder: true
+            });
         } catch (error) {
             openedRef.current = true;
         }
@@ -3117,15 +3142,39 @@ function mvFocusPane(leafId) {
 }
 function mvOpenPanel() {
     try {
+        if (PTX.layout.panelInfo.getSnapshot().activePanelId === MV_PANEL_ID) mvSetMountTarget(null);
         PTX.layout.selectPanel(MV_PANEL_ID);
     } catch (error) {
         console.error('dsh-multiview: selecting the panel failed', error);
     }
 }
+let mvLastPointerAt = 0;
+function mvLandOnPane(leafId, sessionId) {
+    const startedAt = Date.now();
+    const deadline = startedAt + 800;
+    const attempt = ()=>{
+        if (mvLastPointerAt > startedAt) return;
+        if (mvLeafById(mvGetState().layout, leafId) === undefined) return;
+        if (mvGetState().focused !== leafId) {
+            mvFocus(leafId);
+            mvFocusComposer(sessionId);
+        }
+        if (Date.now() < deadline && mvGetState().focused !== leafId) setTimeout(attempt, 40);
+    };
+    mvFocus(leafId);
+    mvFocusComposer(sessionId);
+    setTimeout(attempt, 40);
+}
 function mvOpenSessionInSplit(sessionId) {
-    const leafId = mvPutInPane(sessionId);
+    if (mvSessionInAnySplit(sessionId)) mvOpenForSession(sessionId, {
+        focusHolder: true
+    });
+    else mvPutInPane(sessionId);
+    mvSetMountTarget(sessionId);
     mvOpenPanel();
-    if (leafId !== null) mvFocusComposer(sessionId);
+    const leaf = mvLeaves(mvGetState().layout).find((pane)=>pane.sessionId === sessionId);
+    if (leaf !== undefined) mvLandOnPane(leaf.id, sessionId);
+    else mvFocusComposer(sessionId);
 }
 function apply(ctx) {
     PTX = ctx;
@@ -3134,6 +3183,14 @@ function apply(ctx) {
             zh: MV_ZH,
             en: MV_EN
         }), 'dsh-multiview: dictionaries');
+    ctx.effect(()=>{
+        if (typeof window.addEventListener !== 'function') return ()=>{};
+        const onPointer = ()=>{
+            mvLastPointerAt = Date.now();
+        };
+        window.addEventListener('pointerdown', onPointer, true);
+        return ()=>window.removeEventListener('pointerdown', onPointer, true);
+    }, 'dsh-multiview: pointer clock');
     ctx.effect(()=>{
         const tag = document.createElement('style');
         tag.dataset.plugin = 'dsh-multiview';

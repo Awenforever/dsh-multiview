@@ -363,13 +363,22 @@ function mvReconcile(): void {
  * conversation" from hijacking an unrelated saved split.
  * @param sessionId - the conversation the user is in, if known.
  */
-function mvOpenForSession(sessionId: string | null): void {
+function mvOpenForSession(sessionId: string | null, options?: { focusHolder?: boolean }): void {
   if (sessionId === null) return
+  /* An explicit "show me this Session" click outranks the pane the user happened to be in:
+     keeping that id is right for an automatic open, wrong when they asked for a specific one. */
+  const focusHolder = options?.focusHolder === true
   mvCommit((current) => {
     const owners = current.views.filter((view) => mvViewKey(view.layout).split(',').includes(sessionId))
     const owner = owners[0]
     if (owner !== undefined) {
-      if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) return current
+      if (current.currentViewId === owner.id && mvViewKey(current.layout) === mvViewKey(owner.layout)) {
+        /* Already on that split — and reconcile may have captured it a moment ago, so this is
+           a common path. Nothing to restore; only the landing pane can still be wrong. */
+        const currentHolder = mvLeaves(current.layout).find((leaf) => leaf.sessionId === sessionId)
+        if (!focusHolder || currentHolder === undefined || current.focused === currentHolder.id) return current
+        return { ...current, focused: currentHolder.id, maximized: null }
+      }
       /* Switching to a smaller saved split invalidates the focused pane id (p4 lives in the
          four-pane shape). An invalid focus leaves the whole split keyboard-dead, so repair it:
          keep the user's pane when it still exists, otherwise focus the pane holding the Session
@@ -377,7 +386,14 @@ function mvOpenForSession(sessionId: string | null): void {
       const ownerLeaves = mvLeaves(owner.layout)
       const stillThere = ownerLeaves.some((leaf) => leaf.id === current.focused)
       const holder = ownerLeaves.find((leaf) => leaf.sessionId === sessionId)
-      const focused = stillThere ? current.focused : holder !== undefined ? holder.id : ownerLeaves[0].id
+      const focused =
+        focusHolder && holder !== undefined
+          ? holder.id
+          : stillThere
+            ? current.focused
+            : holder !== undefined
+              ? holder.id
+              : ownerLeaves[0].id
       return {
         ...current,
         layout: owner.layout,
@@ -394,6 +410,7 @@ function mvOpenForSession(sessionId: string | null): void {
       if (holder === undefined) return current
       if (current.focused === holder.id && current.currentViewId === null) return current
       return { ...current, focused: holder.id, maximized: null }
+      /* Note: this branch already lands on the holder, which is what an explicit click wants. */
     }
     const layout = mvWithSession(mvPreset(2), 'p1', sessionId)
     return { ...current, layout, currentViewId: null, focused: 'p1', preset: 2, maximized: null }
@@ -611,6 +628,36 @@ function mvPutInPane(sessionId: string): string | null {
   if (fallback === undefined) return null
   mvBind(fallback.id, sessionId)
   return fallback.id
+}
+
+/**
+ * Session an explicit "open in split" click asked for.
+ *
+ * The sidebar action has already arranged the stage by the time the panel mounts, and the
+ * mount effect would otherwise seed from the conversation the user came from and throw that
+ * arrangement away. Held only across that one mount.
+ */
+let mvMountTarget: string | null = null
+
+/** @param sessionId - Session the user asked to see, or null to forget it. */
+function mvSetMountTarget(sessionId: string | null): void {
+  mvMountTarget = sessionId
+}
+
+/**
+ * Read and clear the pending mount target.
+ * @returns the Session the click asked for, or null when the panel opens on its own.
+ */
+function mvTakeMountTarget(): string | null {
+  const target = mvMountTarget
+  mvMountTarget = null
+  return target
+}
+
+/** Whether any split — on stage or saved — already holds one Session. */
+function mvSessionInAnySplit(sessionId: string): boolean {
+  if (mvViewKey(mvState.layout).split(',').includes(sessionId)) return true
+  return (mvState.views ?? []).some((view) => mvViewKey(view.layout).split(',').includes(sessionId))
 }
 
 /**

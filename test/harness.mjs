@@ -360,6 +360,7 @@ export function bootHost(options = {}) {
 
   const registered = []
   registered.shortcuts = []
+  const panel = { activePanelId: options.activePanelId === undefined ? 'multiview' : options.activePanelId }
   const context = {
     effect: (body) => { if (typeof body === 'function') body(); return () => {} },
     locale: { register: () => {}, bind: () => (key) => key },
@@ -390,8 +391,15 @@ export function bootHost(options = {}) {
       useList: (selector) => selector({ groups: [], workspaceId: 'default', items: [] }),
     },
     layout: {
-      panelInfo: { getSnapshot: () => ({ activePanelId: 'multiview' }) },
-      usePanelInfo: (selector) => selector({ activePanelId: 'multiview' }),
+      /* Which main panel the host has selected. A split test that starts outside the panel
+         passes `activePanelId: null` so `selectPanel` behaves like the real navigation and the
+         stage mounts afterwards. */
+      panelInfo: { getSnapshot: () => ({ activePanelId: panel.activePanelId }) },
+      usePanelInfo: (selector) => selector({ activePanelId: panel.activePanelId }),
+      selectPanel: (id) => {
+        panel.activePanelId = id === undefined ? null : id
+        return true
+      },
     },
     uiWorkspace: { openSession: () => {} },
     shortcuts: { register: (entry) => { registered.shortcuts.push(entry); return () => {} } },
@@ -433,6 +441,8 @@ export function bootHost(options = {}) {
     icon: icon === undefined ? undefined : icon.component,
     hook: window.__mvDebug ?? globalThis.__mvDebug,
     shortcuts: registered.shortcuts,
+    /* Every slot registration, so a test can drive the sidebar row action and menu item. */
+    entries: registered,
     context,
   }
 }

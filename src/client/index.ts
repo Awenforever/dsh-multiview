@@ -76,6 +76,9 @@ function mvFocusPane(leafId: string): void {
  */
 function mvOpenPanel(): void {
   try {
+    /* Already open means no mount will consume the target, and a stale one would steer the
+       next unrelated open; drop it here rather than relying on a timer. */
+    if (PTX.layout.panelInfo.getSnapshot().activePanelId === MV_PANEL_ID) mvSetMountTarget(null)
     PTX.layout.selectPanel(MV_PANEL_ID)
   } catch (error) {
     console.error('dsh-multiview: selecting the panel failed', error)
@@ -86,10 +89,49 @@ function mvOpenPanel(): void {
  * Put a Session into the split from anywhere, then hand it the keyboard.
  * @param sessionId - Session chosen outside the split (sidebar row or menu).
  */
+/** Last real pointer press, used to stop a focus landing the moment the user takes over. */
+let mvLastPointerAt = 0
+
+/**
+ * Land on one pane after the panel mounts.
+ *
+ * The host focuses its own composer while the split mounts, and the pane captures that focus,
+ * which rewrites the focused pane and undoes the click. Re-assert until it sticks, with a hard
+ * stop so a host that keeps stealing focus cannot pin us in a loop.
+ * @param leafId - pane that must end up focused.
+ * @param sessionId - Session whose composer should hold the caret.
+ */
+function mvLandOnPane(leafId: string, sessionId: string): void {
+  const startedAt = Date.now()
+  const deadline = startedAt + 800
+  const attempt = (): void => {
+    /* A click means the user chose something else; never fight that. */
+    if (mvLastPointerAt > startedAt) return
+    if (mvLeafById(mvGetState().layout, leafId) === undefined) return
+    if (mvGetState().focused !== leafId) {
+      mvFocus(leafId)
+      mvFocusComposer(sessionId)
+    }
+    if (Date.now() < deadline && mvGetState().focused !== leafId) setTimeout(attempt, 40)
+  }
+  mvFocus(leafId)
+  mvFocusComposer(sessionId)
+  setTimeout(attempt, 40)
+}
+
 function mvOpenSessionInSplit(sessionId: string): void {
-  const leafId = mvPutInPane(sessionId)
+  /* A Session that already belongs to a split is *found*, not re-placed: growing the current
+     stage would capture a second split around whatever was already on it, which reads as "it
+     opened a new view instead of the one I asked for". */
+  if (mvSessionInAnySplit(sessionId)) mvOpenForSession(sessionId, { focusHolder: true })
+  else mvPutInPane(sessionId)
+  /* Tell the stage why it is being mounted; without this the mount effect re-seeds from the
+     conversation the user came from and undoes the line above. */
+  mvSetMountTarget(sessionId)
   mvOpenPanel()
-  if (leafId !== null) mvFocusComposer(sessionId)
+  const leaf = mvLeaves(mvGetState().layout).find((pane) => pane.sessionId === sessionId)
+  if (leaf !== undefined) mvLandOnPane(leaf.id, sessionId)
+  else mvFocusComposer(sessionId)
 }
 
 /**
@@ -101,6 +143,18 @@ function apply(ctx) {
   T = ctx.locale.bind(NS)
 
   ctx.effect(() => ctx.locale.register(NS, { zh: MV_ZH, en: MV_EN }), 'dsh-multiview: dictionaries')
+
+  /* Capture phase so a press anywhere counts, including one that stops propagation. Guarded
+     because a host (or a test double) may not implement events; the clock is an optimisation,
+     not a requirement — without it a landing simply cannot tell that the user took over. */
+  ctx.effect(() => {
+    if (typeof window.addEventListener !== 'function') return () => {}
+    const onPointer = (): void => {
+      mvLastPointerAt = Date.now()
+    }
+    window.addEventListener('pointerdown', onPointer, true)
+    return () => window.removeEventListener('pointerdown', onPointer, true)
+  }, 'dsh-multiview: pointer clock')
 
   ctx.effect(() => {
     const tag = document.createElement('style')

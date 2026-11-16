@@ -866,14 +866,16 @@ function MvUpdateDialog(props) {
 function MvRowSplitAction(props) {
   const { sessionId } = props
   const state = useMvState()
-  const holder = mvLeaves(state.layout).find((leaf) => leaf.sessionId === sessionId)
-  const label = holder === undefined ? T('rowActionAdd') : T('rowActionFocus')
+  /* Saved splits count too: a Session that lives in the library is still "in the split", and
+     telling the user it is not would offer to open it again. */
+  const inSplit = mvSessionInAnySplit(sessionId)
+  const label = inSplit ? T('rowActionFocus') : T('rowActionAdd')
   return h(
     'button',
     {
       type: 'button',
       className: 'mv-row-action',
-      'data-active': holder === undefined ? 'false' : 'true',
+      'data-active': inSplit ? 'true' : 'false',
       title: label,
       'aria-label': label,
       onClick: () => mvOpenSessionInSplit(sessionId),
@@ -1084,9 +1086,14 @@ function MultiviewStage(props) {
     try {
       const snapshot = PTX.sessions.list.getSnapshot()
       if (snapshot.phase !== 'ready') return
-      const current = snapshot.ids.find((id) => ((snapshot.byId[id]?.retainedBy?.mainView ?? 0) as number) > 0)
+      /* An explicit click already arranged the stage; that Session wins over "the one I was
+         looking at", which is only the right seed for a plain 分屏 open. */
+      const target = mvTakeMountTarget()
+      const current = target ?? snapshot.ids.find((id) => ((snapshot.byId[id]?.retainedBy?.mainView ?? 0) as number) > 0)
       openedRef.current = true
-      if (typeof current === 'string') mvOpenForSession(current)
+      /* Either way this is "show me that conversation": land on its pane, including when the
+         stage was already on screen and its view had just been captured by reconcile. */
+      if (typeof current === 'string') mvOpenForSession(current, { focusHolder: true })
     } catch (error) {
       openedRef.current = true
     }
